@@ -1,0 +1,66 @@
+# AkashicCodex Design
+
+## Goal
+
+A local memory store for AI conversations that is owned by the user and independent of any model. Switch models freely; the history persists because it lives in the database, not the model.
+
+Three design priorities, in order:
+
+1. **Model-agnostic.** No model-specific logic in the store. Any model is a client.
+2. **Local and private.** One file on the user's machine. Shared only when the user chooses.
+3. **Useful daily.** Saving is one easy step; search actually finds the right thing.
+
+## Layers
+
+```
+   AI model (Claude / Gemini / Ollama / ...)   <- generation only; just a client
+                  |
+        interface (CLI now -> REST -> MCP)      <- stable contract: save, search, get
+                  |
+          core service (Python)                 <- ingest, embed, search
+                  |
+        database layer (db.py)                  <- the ONLY SQLite-specific code
+                  |
+          SQLite + sqlite-vec  (data/akashic.db)
+```
+
+The model does generation only. The service owns storage, summarization-at-ingest, the single fixed embedding model, and search. The model asks "what do I know about X", gets summaries back, and requests the full log only when it wants it. Nothing in the database knows which model asked.
+
+## Data model
+
+`conversations` (id, title, summary, source, created_at, full_log)
+`tags` (id, name) and `conversation_tags` (many-to-many)
+`conversations_fts` (FTS5 over title + summary) for keyword search
+`summary_vectors` (vec0, embedding of the summary) for semantic search
+
+See `schema.sql`.
+
+## Retrieval: two tiers + hybrid
+
+Tier 1, cheap: rank over summaries. Tier 2, expensive: load full_log only on a match.
+
+Hybrid ranking combines keyword search (FTS5, high precision, exact terms) with semantic search (vectors, high recall, catches rephrasings). Merge and de-duplicate into one ranked list. Return lightweight rows from search; never return full_log from the search call.
+
+## The embedding rule
+
+Pick ONE embedding model and use it for everything written to and queried against the store. Vectors from different models are not comparable. Use a local model (`all-MiniLM-L6-v2`, 384 dims, via sentence-transformers) to stay vendor-independent. Store the model name so future-you can re-embed if you ever switch. The schema vector dimension must match the model.
+
+## Why SQLite
+
+Local-first, single file the user owns, zero server to run or secure, single-user so the one-writer limit never bites. The only tradeoff is that vector search comes from the `sqlite-vec` add-on rather than being built in. All SQLite code is isolated in `db.py`, so a future move to Postgres + pgvector is a contained change, not a rewrite.
+
+## Build roadmap
+
+1. **Core storage.** Implement `db.connect` / `db.init_db`. Save and read a conversation. Prove the round trip with a test.
+2. **Keyword search.** Wire up FTS5; `search()` returns summary rows for a query.
+3. **Embeddings.** Implement `embeddings.embed`; add `sqlite-vec`; store and query summary vectors.
+4. **Hybrid search.** Merge keyword + semantic results into one ranked list.
+5. **Ingest pipeline.** `summarize` + `suggest_tags`, wired into `save_conversation`.
+6. **CLI.** Make init / save / search / show all work end to end.
+7. **REST API.** Wrap the core in FastAPI so any client can call it.
+8. **MCP server.** Expose `search_memory` and `get_conversation` as MCP tools so any MCP-capable model can use the store directly.
+9. **Polish.** Small web view or TUI for demos; README screenshots.
+
+## Stretch ideas
+
+Re-embedding command for switching embedding models. Import adapters for Claude/Gemini/ChatGPT export formats. Encryption at rest. A "related conversations" link graph.

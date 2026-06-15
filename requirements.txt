@@ -1,0 +1,17 @@
+# Core
+# sqlite3 ships with Python, no install needed.
+
+# Semantic / vector search extension for SQLite.
+# Lets you store embeddings and run similarity queries inside SQLite.
+sqlite-vec
+
+# Local embedding model (model-agnostic, runs offline).
+# Pick ONE embedding model and use it for everything written to the store.
+sentence-transformers
+
+# API layer (add when you build the service stage).
+fastapi
+uvicorn
+
+# Dev / testing
+pytest

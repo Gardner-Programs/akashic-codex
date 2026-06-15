@@ -1,0 +1,10 @@
+[project]
+name = "akashic-codex"
+version = "0.1.0"
+description = "A local, model-agnostic memory store for AI conversations."
+readme = "README.md"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
