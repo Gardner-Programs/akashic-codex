@@ -60,3 +60,15 @@ def get_conversation(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | No
         (conv_id,),
     ).fetchone()
     return row
+
+
+def search_fts(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[sqlite3.Row]:
+    """Searches conversation history in the database."""
+    rows = conn.execute(
+        """SELECT rowid AS id, title, summary
+            FROM conversations_fts
+            WHERE conversations_fts MATCH ?
+            LIMIT ?""",
+        (query, limit),
+    ).fetchall()
+    return rows

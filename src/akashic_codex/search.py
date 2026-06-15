@@ -6,8 +6,12 @@ Tier 2 (expensive): load the full transcript only for a chosen match.
 Hybrid search = keyword (FTS, precise) + semantic (vectors, catches rephrasings).
 """
 
+import sqlite3
 
-def search(query: str, limit: int = 5) -> list[dict]:
+from akashic_codex import db
+
+
+def search(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[dict]:
     """Return ranked conversation summaries matching the query.
 
     TODO:
@@ -16,7 +20,8 @@ def search(query: str, limit: int = 5) -> list[dict]:
       - merge and de-duplicate the two result sets into one ranked list
       - return lightweight rows only (id, title, summary, tags, score) -- NOT full_log
     """
-    raise NotImplementedError
+    rows = db.search_fts(conn, query, limit)
+    return [dict(r) for r in rows]
 
 
 def get_conversation(conversation_id: int) -> dict:

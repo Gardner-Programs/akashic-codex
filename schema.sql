@@ -32,6 +32,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
     content_rowid='id'
 );
 
+CREATE TRIGGER IF NOT EXISTS conversations_ai
+AFTER INSERT ON conversations
+BEGIN
+    INSERT INTO conversations_fts(rowid, title, summary)
+    VALUES (new.id, new.title, new.summary);
+END;
+
 -- Semantic search over summary embeddings (vector similarity, high recall).
 -- Requires the sqlite-vec extension to be loaded at connection time.
 -- TODO: set the dimension to match your chosen embedding model

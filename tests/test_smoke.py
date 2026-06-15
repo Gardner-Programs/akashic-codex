@@ -7,6 +7,7 @@ import pytest
 
 from akashic_codex import __version__
 from akashic_codex.db import connect, get_conversation, init_db, insert_conversation
+from akashic_codex.search import search
 
 
 def test_package_imports():
@@ -19,7 +20,7 @@ def db_conn(tmp_path):
     init_db(db_path)
     conn = connect(db_path)
     yield conn
-    conn.close() 
+    conn.close()
 
 
 def test_save_then_search_roundtrip(db_conn):
@@ -39,6 +40,14 @@ def test_init_db_creates_tables(db_conn):
 
 def test_get_missing_returns_none(db_conn):
     assert get_conversation(db_conn, 999) is None
+
+
+def test_search_returns_summaries_not_full_log(db_conn):
+    insert_conversation(db_conn, "Talk about zebras", "the full transcript")
+    result = search(db_conn, "zebras")
+    assert len(result) == 1
+    assert result[0]["title"] == "Talk about zebras"
+    assert "full_log" not in result[0]
 
 
 # TODO as you build:

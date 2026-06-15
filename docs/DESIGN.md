@@ -45,6 +45,13 @@ Hybrid ranking combines keyword search (FTS5, high precision, exact terms) with 
 
 Pick ONE embedding model and use it for everything written to and queried against the store. Vectors from different models are not comparable. Use a local model (`all-MiniLM-L6-v2`, 384 dims, via sentence-transformers) to stay vendor-independent. Store the model name so future-you can re-embed if you ever switch. The schema vector dimension must match the model.
 
+## Two AI backends, two different rules
+
+The system uses AI in two places, and they have opposite swap rules. Do not conflate them.
+
+- **Summarizer (pluggable, optional, local-capable).** Generates a conversation's summary. Summaries are plain text, so any backend is interchangeable: default to a local model (e.g. Ollama) to avoid paid tokens, allow switching via config, and keep generation optional (save raw now, summarize on demand later, e.g. a `/summarize` command). Never hardcode one provider, never make it mandatory. Use the env-var-plus-default config pattern (see `embeddings.py`).
+- **Embedder (fixed, swappable only via full re-embed).** Turns a summary into a vector for semantic search. Vectors only have meaning relative to the model that made them, so the whole store must use one model. The config mechanism looks identical to the summarizer (env var + default), but the rule is set-once-before-first-ingest, not change-freely. Switching is allowed only by re-embedding the entire corpus at once (see stretch ideas), which may also require recreating the vector table at the new dimension.
+
 ## Why SQLite
 
 Local-first, single file the user owns, zero server to run or secure, single-user so the one-writer limit never bites. The only tradeoff is that vector search comes from the `sqlite-vec` add-on rather than being built in. All SQLite code is isolated in `db.py`, so a future move to Postgres + pgvector is a contained change, not a rewrite.
@@ -63,4 +70,4 @@ Local-first, single file the user owns, zero server to run or secure, single-use
 
 ## Stretch ideas
 
-Re-embedding command for switching embedding models. Import adapters for Claude/Gemini/ChatGPT export formats. Encryption at rest. A "related conversations" link graph.
+Re-embedding command for switching embedding models: re-embed every summary with the new model in one shot, replace all vectors, update the stored model name, and (if dimensions change) drop and recreate the vector table. All-or-nothing; never mix two models' vectors. This is what makes the embedder "drag-and-drop" swappable for the user while staying internally consistent. If a paid backend (embedder or summarizer) is configured, estimate and surface token/cost before running so the user opts in knowingly; local backends report zero. Import adapters for Claude/Gemini/ChatGPT export formats. Encryption at rest. A "related conversations" link graph.
