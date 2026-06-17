@@ -39,11 +39,13 @@ BEGIN
     VALUES (new.id, new.title, new.summary);
 END;
 
+CREATE VIRTUAL TABLE IF NOT EXISTS summary_vectors USING vec0(
+    conversation_id INTEGER PRIMARY KEY,
+    embedding FLOAT[384]
+);
+
 -- Semantic search over summary embeddings (vector similarity, high recall).
 -- Requires the sqlite-vec extension to be loaded at connection time.
 -- TODO: set the dimension to match your chosen embedding model
 --       (all-MiniLM-L6-v2 = 384). Keep one model for the whole DB.
--- CREATE VIRTUAL TABLE IF NOT EXISTS summary_vectors USING vec0(
---     conversation_id INTEGER PRIMARY KEY,
---     embedding FLOAT[384]
--- );
+

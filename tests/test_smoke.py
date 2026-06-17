@@ -3,10 +3,21 @@
 Run with:  pytest
 """
 
+import re
+
 import pytest
 
 from akashic_codex import __version__
-from akashic_codex.db import connect, get_conversation, init_db, insert_conversation
+from akashic_codex.db import (
+    SCHEMA_PATH,
+    connect,
+    get_conversation,
+    init_db,
+    insert_conversation,
+    insert_vector,
+    search_vectors,
+)
+from akashic_codex.embeddings import embed
 from akashic_codex.search import search
 
 
@@ -48,6 +59,23 @@ def test_search_returns_summaries_not_full_log(db_conn):
     assert len(result) == 1
     assert result[0]["title"] == "Talk about zebras"
     assert "full_log" not in result[0]
+
+
+def test_embedding_dimension_matches_schema():
+    model_dim = len(embed("any text"))
+    schema_text = SCHEMA_PATH.read_text()
+    schema_dim = int(re.search(r"FLOAT\[(\d+)\]", schema_text).group(1))
+    assert model_dim == schema_dim
+
+
+def test_semantic_search_ranks_by_meaning(db_conn):
+    relevant = insert_conversation(db_conn, "How to debug a segfault in C", "x")
+    other = insert_conversation(db_conn, "Best pasta recipes for dinner", "x")
+    insert_vector(db_conn, relevant, embed("How to debug a segfault in C"))
+    insert_vector(db_conn, other, embed("Best pasta recipes for dinner"))
+
+    results = search_vectors(db_conn, embed("troubleshooting crashes from bad pointers"), limit=2)
+    assert results[0]["conversation_id"] == relevant
 
 
 # TODO as you build:

@@ -8,6 +8,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+import sqlite_vec
+
 DB_PATH = os.environ.get("AKASHIC_DB_PATH", "data/akashic.db")
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema.sql"
 
@@ -25,6 +27,9 @@ def connect(db_path: str = DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.row_factory = sqlite3.Row
+    conn.enable_load_extension(True)
+    sqlite_vec.load(conn)
+    conn.enable_load_extension(False)
     return conn
 
 
@@ -70,5 +75,30 @@ def search_fts(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[sql
             WHERE conversations_fts MATCH ?
             LIMIT ?""",
         (query, limit),
+    ).fetchall()
+    return rows
+
+
+def insert_vector(conn: sqlite3.Connection, conv_id: int, vector: list[float]) -> None:
+    """Inserts a conversations vector into the database."""
+    with conn:
+        conn.execute(
+            """INSERT INTO summary_vectors
+            (conversation_id, embedding) VALUES (?, ?)""",
+            (conv_id, sqlite_vec.serialize_float32(vector)),
+        )
+
+
+def search_vectors(
+    conn: sqlite3.Connection, query_vector: list[float], limit: int = 5
+) -> list[sqlite3.Row]:
+    """Searches conversations by vectors using KNN to find near matches."""
+    rows = conn.execute(
+        """SELECT conversation_id, distance
+            FROM summary_vectors
+            WHERE embedding MATCH ?
+            ORDER BY distance
+            LIMIT ?""",
+        (sqlite_vec.serialize_float32(query_vector), limit),
     ).fetchall()
     return rows
