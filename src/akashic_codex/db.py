@@ -121,7 +121,34 @@ def get_conversation(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | No
     return row
 
 
-def search_fts(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[sqlite3.Row]:
+def get_summary_row(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | None:
+    """Load one conversation's lightweight fields by id (id, title, summary).
+
+    Used to build search results from ranked ids without loading the full
+    transcript (full_log), which keeps tier-1 search cheap.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    conv_id : int
+        Primary key of the conversation to load.
+
+    Returns
+    -------
+    sqlite3.Row or None
+        The lightweight row (id, title, summary), or None if no row matches.
+    """
+    row = conn.execute(
+        """SELECT id, title, summary
+            FROM conversations
+            WHERE id = ?""",
+        (conv_id,),
+    ).fetchone()
+    return row
+
+
+def search_fts(conn: sqlite3.Connection, query: str, limit: int = 5) -> list[sqlite3.Row]:
     """Keyword search over title and summary via FTS5.
 
     Tier-1 search: returns lightweight rows only, never full_log. Multi-word
@@ -134,7 +161,7 @@ def search_fts(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[sql
     query : str
         Search terms; multiple words are AND-ed together.
     limit : int, optional
-        Maximum number of rows to return (default 3).
+        Maximum number of rows to return (default 5).
 
     Returns
     -------

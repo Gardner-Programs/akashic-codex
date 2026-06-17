@@ -5,14 +5,10 @@ Run with:  pytest
 
 import re
 
-import pytest
-
 from akashic_codex import __version__
 from akashic_codex.db import (
     SCHEMA_PATH,
-    connect,
     get_conversation,
-    init_db,
     insert_conversation,
     insert_vector,
     search_vectors,
@@ -23,15 +19,6 @@ from akashic_codex.search import fuse, search
 
 def test_package_imports():
     assert __version__
-
-
-@pytest.fixture
-def db_conn(tmp_path):
-    db_path = str(tmp_path / "test.db")
-    init_db(db_path)
-    conn = connect(db_path)
-    yield conn
-    conn.close()
 
 
 def test_save_then_search_roundtrip(db_conn):
@@ -82,6 +69,18 @@ def test_fuse_rewards_ids_in_multiple_lists():
     result = fuse([[1, 4, 7, 8], [9, 4, 1, 0]])
     assert set(result[:2]) == {1, 4}
     assert set(result[3:]) == {0, 8, 7}
+
+
+def test_hybrid_search_finds_by_meaning(seeded_conn):
+    c_search = search(seeded_conn, "C sharp")
+    ids = [r["id"] for r in c_search]
+    assert ids.index(1) < ids.index(2)
+    assert ids.index(3) < ids.index(2)
+
+
+def test_hybrid_search_finds_by_keyword(seeded_conn):
+    cook_search = search(seeded_conn, "pasta")
+    assert cook_search[0]["id"] == 2
 
 
 # TODO as you build:

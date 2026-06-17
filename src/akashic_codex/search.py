@@ -9,13 +9,18 @@ Hybrid search = keyword (FTS, precise) + semantic (vectors, catches rephrasing).
 import sqlite3
 
 from akashic_codex import db
+from akashic_codex.embeddings import embed
+
+CANDIDATE_POOL = 20
 
 
-def search(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[dict]:
-    """Search stored conversations and return ranked lightweight results.
+def search(conn: sqlite3.Connection, query: str, limit: int = 5) -> list[dict]:
+    """Hybrid search over stored conversations, returning lightweight results.
 
-    Currently keyword-only (FTS5 via db.search_fts). Semantic and hybrid ranking
-    are layered in at later roadmap steps. Never returns full_log.
+    Combines keyword search (FTS5) and semantic search (vector nearest-neighbor),
+    fusing the two rankings with Reciprocal Rank Fusion. Each method contributes
+    a wider candidate pool (CANDIDATE_POOL) that is fused and then trimmed to
+    ``limit``. Never returns full_log.
 
     Parameters
     ----------
@@ -24,19 +29,40 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[dict]:
     query : str
         The search query.
     limit : int, optional
-        Maximum number of results to return (default 3).
+        Maximum number of results to return (default 5).
 
     Returns
     -------
     list[dict]
         Lightweight result rows (id, title, summary), most relevant first.
     """
-    rows = db.search_fts(conn, query, limit)
-    return [dict(r) for r in rows]
+    fts_rows = db.search_fts(conn, query, CANDIDATE_POOL)
+    vec_rows = db.search_vectors(conn, embed(query), CANDIDATE_POOL)
+    fts_ids = [row["id"] for row in fts_rows]
+    vec_ids = [row["conversation_id"] for row in vec_rows]
+    ranked_ids = fuse([fts_ids, vec_ids])[:limit]
+    return [dict(db.get_summary_row(conn, id)) for id in ranked_ids]
 
 
 def fuse(ranked_lists: list[list[int]], k: int = 60) -> list[int]:
-    """Returns a ranked list of searches based on keyword and near search matches"""
+    """Merge ranked id lists into one ranking via Reciprocal Rank Fusion.
+
+    Each id scores the sum of 1 / (k + rank) across the lists it appears in, so
+    ids found by multiple search methods rank higher and duplicates are merged.
+
+    Parameters
+    ----------
+    ranked_lists : list[list[int]]
+        Each inner list is conversation ids in rank order (best first).
+    k : int, optional
+        RRF damping constant; larger values flatten the weight of top ranks
+        (default 60).
+
+    Returns
+    -------
+    list[int]
+        Conversation ids ordered by fused score, best first.
+    """
     scores = {}
     for ranked_list in ranked_lists:
         for rank, id in enumerate(ranked_list):
