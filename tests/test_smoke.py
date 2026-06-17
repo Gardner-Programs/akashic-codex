@@ -18,7 +18,7 @@ from akashic_codex.db import (
     search_vectors,
 )
 from akashic_codex.embeddings import embed
-from akashic_codex.search import search
+from akashic_codex.search import fuse, search
 
 
 def test_package_imports():
@@ -76,6 +76,12 @@ def test_semantic_search_ranks_by_meaning(db_conn):
 
     results = search_vectors(db_conn, embed("troubleshooting crashes from bad pointers"), limit=2)
     assert results[0]["conversation_id"] == relevant
+
+
+def test_fuse_rewards_ids_in_multiple_lists():
+    result = fuse([[1, 4, 7, 8], [9, 4, 1, 0]])
+    assert set(result[:2]) == {1, 4}
+    assert set(result[3:]) == {0, 8, 7}
 
 
 # TODO as you build:
