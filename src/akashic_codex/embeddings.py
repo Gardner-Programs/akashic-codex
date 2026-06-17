@@ -15,12 +15,22 @@ _model = None
 
 
 def embed(text: str) -> list[float]:
-    """Turn text into a vector.
+    """Embed text into a fixed-length semantic vector.
 
-    TODO:
-      - lazy-load a sentence-transformers model (cache it; loading is slow)
-      - return model.encode(text) as a plain list of floats
-      - all-MiniLM-L6-v2 returns 384 dimensions; match this in schema.sql
+    Uses one fixed local model (see MODEL_NAME) for the entire store; vectors
+    from different models are not comparable. The model is lazy-loaded on first
+    call and cached for reuse.
+
+    Parameters
+    ----------
+    text : str
+        The text to embed (a summary at ingest time, or a query at search time).
+
+    Returns
+    -------
+    list[float]
+        The embedding vector (384 dimensions for all-MiniLM-L6-v2). Its length
+        must match the summary_vectors dimension in schema.sql.
     """
     global _model
     if _model is None:

@@ -12,13 +12,24 @@ from akashic_codex import db
 
 
 def search(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[dict]:
-    """Return ranked conversation summaries matching the query.
+    """Search stored conversations and return ranked lightweight results.
 
-    TODO:
-      - keyword: query conversations_fts (MATCH) for exact-ish hits
-      - semantic: embeddings.embed(query), then nearest neighbours in summary_vectors
-      - merge and de-duplicate the two result sets into one ranked list
-      - return lightweight rows only (id, title, summary, tags, score) -- NOT full_log
+    Currently keyword-only (FTS5 via db.search_fts). Semantic and hybrid ranking
+    are layered in at later roadmap steps. Never returns full_log.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    query : str
+        The search query.
+    limit : int, optional
+        Maximum number of results to return (default 3).
+
+    Returns
+    -------
+    list[dict]
+        Lightweight result rows (id, title, summary), most relevant first.
     """
     rows = db.search_fts(conn, query, limit)
     return [dict(r) for r in rows]

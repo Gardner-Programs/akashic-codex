@@ -15,13 +15,25 @@ SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema.sql"
 
 
 def connect(db_path: str = DB_PATH) -> sqlite3.Connection:
-    """Open a connection with sane defaults.
+    """Open a SQLite connection configured for AkashicCodex.
 
-    TODO:
-      - enable foreign keys: conn.execute("PRAGMA foreign_keys = ON")
-      - set row_factory = sqlite3.Row so rows behave like dicts
-      - load the sqlite-vec extension here (conn.enable_load_extension(True), then
-        import sqlite_vec; sqlite_vec.load(conn)) so vector queries work
+    Applies per-connection setup that does not persist in the database file:
+    enables foreign-key enforcement, sets row_factory so rows are accessible by
+    column name, and loads the sqlite-vec extension so vector queries work. The
+    parent directory is created if missing. The caller owns the returned
+    connection and is responsible for closing it.
+
+    Parameters
+    ----------
+    db_path : str, optional
+        Path to the SQLite database file, created if it does not exist
+        (default AKASHIC_DB_PATH).
+
+    Returns
+    -------
+    sqlite3.Connection
+        An open connection with foreign keys on, the Row factory set, and
+        sqlite-vec loaded.
     """
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -34,9 +46,16 @@ def connect(db_path: str = DB_PATH) -> sqlite3.Connection:
 
 
 def init_db(db_path: str = DB_PATH) -> None:
-    """Create the schema if it does not exist.
+    """Create the schema if it does not already exist.
 
-    TODO: read schema.sql and executescript() it against a fresh connection.
+    Reads schema.sql and runs it against a fresh connection. Safe to call
+    repeatedly: every statement uses CREATE ... IF NOT EXISTS. Opens and closes
+    its own connection.
+
+    Parameters
+    ----------
+    db_path : str, optional
+        Path to the SQLite database file (default AKASHIC_DB_PATH).
     """
     schema = SCHEMA_PATH.read_text()
     conn = connect(db_path)
@@ -48,7 +67,26 @@ def init_db(db_path: str = DB_PATH) -> None:
 
 
 def insert_conversation(conn: sqlite3.Connection, title: str, full_log: str) -> int:
-    """Inserts a conversation into the database."""
+    """Insert a conversation and return its new auto-generated id.
+
+    The keyword-search index (conversations_fts) is kept in sync automatically
+    by an AFTER INSERT trigger; the semantic vector is stored separately via
+    insert_vector.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    title : str
+        Human-readable title (indexed for keyword search).
+    full_log : str
+        The complete transcript text.
+
+    Returns
+    -------
+    int
+        The auto-generated id of the new conversations row.
+    """
     with conn:
         cur = conn.execute(
             "INSERT INTO conversations (title, full_log) VALUES (?, ?)", (title, full_log)
@@ -57,7 +95,23 @@ def insert_conversation(conn: sqlite3.Connection, title: str, full_log: str) -> 
 
 
 def get_conversation(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | None:
-    """Retrieves a conversation from the database."""
+    """Load one full conversation by id (the expensive tier-2 read).
+
+    Call this only on a confirmed match, never for ranking; search returns
+    lightweight rows instead.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    conv_id : int
+        Primary key of the conversation to load.
+
+    Returns
+    -------
+    sqlite3.Row or None
+        The complete record including full_log, or None if no row matches.
+    """
     row = conn.execute(
         """SELECT id, title, summary, source, created_at, full_log
             FROM conversations
@@ -68,7 +122,26 @@ def get_conversation(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | No
 
 
 def search_fts(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[sqlite3.Row]:
-    """Searches conversation history in the database."""
+    """Keyword search over title and summary via FTS5.
+
+    Tier-1 search: returns lightweight rows only, never full_log. Multi-word
+    queries are treated as AND (every term must match).
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    query : str
+        Search terms; multiple words are AND-ed together.
+    limit : int, optional
+        Maximum number of rows to return (default 3).
+
+    Returns
+    -------
+    list[sqlite3.Row]
+        Rows of (id, title, summary) ranked by relevance, or an empty list when
+        nothing matches.
+    """
     rows = conn.execute(
         """SELECT rowid AS id, title, summary
             FROM conversations_fts
@@ -80,7 +153,21 @@ def search_fts(conn: sqlite3.Connection, query: str, limit: int = 3) -> list[sql
 
 
 def insert_vector(conn: sqlite3.Connection, conv_id: int, vector: list[float]) -> None:
-    """Inserts a conversations vector into the database."""
+    """Store a precomputed embedding vector for a conversation.
+
+    The vector must already be produced by embeddings.embed (this layer does not
+    embed), and its length must match the summary_vectors dimension. It is
+    serialized to float32 bytes for sqlite-vec.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    conv_id : int
+        Id of the conversation the vector belongs to.
+    vector : list[float]
+        The precomputed embedding (length must match the schema dimension).
+    """
     with conn:
         conn.execute(
             """INSERT INTO summary_vectors
@@ -92,7 +179,26 @@ def insert_vector(conn: sqlite3.Connection, conv_id: int, vector: list[float]) -
 def search_vectors(
     conn: sqlite3.Connection, query_vector: list[float], limit: int = 5
 ) -> list[sqlite3.Row]:
-    """Searches conversations by vectors using KNN to find near matches."""
+    """Semantic nearest-neighbor search over stored summary vectors.
+
+    Takes a precomputed query vector and returns the closest conversations,
+    nearest first (smaller distance means more similar). Lightweight rows only;
+    load full records separately.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    query_vector : list[float]
+        The precomputed embedding of the search query.
+    limit : int, optional
+        Maximum number of matches to return (default 5).
+
+    Returns
+    -------
+    list[sqlite3.Row]
+        Rows of (conversation_id, distance) ordered nearest first.
+    """
     rows = conn.execute(
         """SELECT conversation_id, distance
             FROM summary_vectors
