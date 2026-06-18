@@ -148,6 +148,17 @@ def get_summary_row(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | Non
     return row
 
 
+def _sanitize_fts_query(query: str) -> str:
+    """Quote each term so FTS5 treats the query as literal text.
+
+    Wraps every whitespace-separated term in double quotes (doubling any internal
+    quote to escape it), which neutralizes FTS5 query operators and special
+    characters so arbitrary user input cannot raise a syntax error. This trades
+    away FTS operator support: input is matched as plain AND-ed terms.
+    """
+    return " ".join('"' + word.replace('"', '""') + '"' for word in query.split())
+
+
 def search_fts(conn: sqlite3.Connection, query: str, limit: int = 5) -> list[sqlite3.Row]:
     """Keyword search over title and summary via FTS5.
 
@@ -169,12 +180,15 @@ def search_fts(conn: sqlite3.Connection, query: str, limit: int = 5) -> list[sql
         Rows of (id, title, summary) ranked by relevance, or an empty list when
         nothing matches.
     """
+    sanitized = _sanitize_fts_query(query)
+    if not sanitized:
+        return []
     rows = conn.execute(
         """SELECT rowid AS id, title, summary
             FROM conversations_fts
             WHERE conversations_fts MATCH ?
             LIMIT ?""",
-        (query, limit),
+        (sanitized, limit),
     ).fetchall()
     return rows
 

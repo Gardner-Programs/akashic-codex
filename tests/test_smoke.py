@@ -11,6 +11,7 @@ from akashic_codex.db import (
     get_conversation,
     insert_conversation,
     insert_vector,
+    search_fts,
     search_vectors,
 )
 from akashic_codex.embeddings import embed
@@ -76,6 +77,14 @@ def test_hybrid_search_finds_by_meaning(seeded_conn):
     ids = [r["id"] for r in c_search]
     assert ids.index(1) < ids.index(2)
     assert ids.index(3) < ids.index(2)
+
+
+def test_search_fts_handles_special_characters(db_conn):
+    insert_conversation(db_conn, "Learning C# basics", "x")
+    for q in ["C#", "what's this?", "", "   ", "* )  (:, ^+ -}{"]:
+        results = search_fts(db_conn, q)
+        assert isinstance(results, list)
+    assert len(search_fts(db_conn, "C#")) == 1
 
 
 def test_hybrid_search_finds_by_keyword(seeded_conn):
