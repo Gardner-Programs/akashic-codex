@@ -66,7 +66,9 @@ def init_db(db_path: str = DB_PATH) -> None:
         conn.close()
 
 
-def insert_conversation(conn: sqlite3.Connection, title: str, full_log: str) -> int:
+def insert_conversation(
+    conn: sqlite3.Connection, title: str, full_log: str, summary=None, source=None
+) -> int:
     """Insert a conversation and return its new auto-generated id.
 
     The keyword-search index (conversations_fts) is kept in sync automatically
@@ -81,6 +83,11 @@ def insert_conversation(conn: sqlite3.Connection, title: str, full_log: str) -> 
         Human-readable title (indexed for keyword search).
     full_log : str
         The complete transcript text.
+    summary : str or None, optional
+        Short summary (indexed for keyword search; pass it here so the FTS
+        trigger picks it up at insert time).
+    source : str or None, optional
+        Which model or app the conversation came from.
 
     Returns
     -------
@@ -89,9 +96,87 @@ def insert_conversation(conn: sqlite3.Connection, title: str, full_log: str) -> 
     """
     with conn:
         cur = conn.execute(
-            "INSERT INTO conversations (title, full_log) VALUES (?, ?)", (title, full_log)
+            "INSERT INTO conversations (title, full_log, summary, source) VALUES (?, ?, ?, ?)",
+            (title, full_log, summary, source),
         )
     return cur.lastrowid
+
+
+def get_or_create_tag(conn: sqlite3.Connection, name: str) -> int:
+    """Return the id of a tag, creating it if it does not exist.
+
+    The name is normalized (stripped and lowercased) so the same tag is not
+    duplicated by case or surrounding whitespace, relying on the UNIQUE
+    constraint on tags.name.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    name : str
+        The tag name.
+
+    Returns
+    -------
+    int
+        The id of the existing or newly created tag.
+    """
+    tag = name.strip().lower()
+    with conn:
+        conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag,))
+        row = conn.execute("SELECT id FROM tags WHERE name = ?", (tag,)).fetchone()
+    return row["id"]
+
+
+def get_tags(conn: sqlite3.Connection, conv_id: int) -> list[str]:
+    """Return the tag names linked to a conversation.
+
+    Joins conversation_tags to tags to resolve the many-to-many link into a flat
+    list of tag names.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    conv_id : int
+        Id of the conversation whose tags to fetch.
+
+    Returns
+    -------
+    list[str]
+        The tag names linked to the conversation (empty if none).
+    """
+    rows = conn.execute(
+        """SELECT t.name
+        FROM tags t
+        JOIN conversation_tags ct ON t.id = ct.tag_id
+        WHERE ct.conversation_id = ?
+        """,
+        (conv_id,),
+    ).fetchall()
+    return [r["name"] for r in rows]
+
+
+def link_conversation_tag(conn: sqlite3.Connection, conv_id: int, tag_id: int) -> None:
+    """Link a conversation to a tag (idempotent).
+
+    Inserts the (conversation_id, tag_id) pair into conversation_tags; a repeated
+    link is ignored rather than raising.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    conv_id : int
+        Id of the conversation.
+    tag_id : int
+        Id of the tag.
+    """
+    with conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id) VALUES (?, ?)",
+            (conv_id, tag_id),
+        )
 
 
 def get_conversation(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | None:

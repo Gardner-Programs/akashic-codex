@@ -9,12 +9,14 @@ from akashic_codex import __version__
 from akashic_codex.db import (
     SCHEMA_PATH,
     get_conversation,
+    get_tags,
     insert_conversation,
     insert_vector,
     search_fts,
     search_vectors,
 )
 from akashic_codex.embeddings import embed
+from akashic_codex.ingest import save_conversation
 from akashic_codex.search import fuse, search
 
 
@@ -92,8 +94,25 @@ def test_hybrid_search_finds_by_keyword(seeded_conn):
     assert cook_search[0]["id"] == 2
 
 
-# TODO as you build:
-#   test_init_db_creates_tables
-#   test_save_then_search_roundtrip
-#   test_search_returns_summaries_not_full_log
-#   test_embedding_dimension_matches_schema
+def test_save_conversations(db_conn):
+    conv_id = save_conversation(db_conn, "convo testing full log", "convo testing", "cli")
+    convo = get_conversation(db_conn, conv_id)
+    assert convo["title"] == "convo testing"
+    assert convo["source"] == "cli"
+    assert convo["full_log"] == "convo testing full log"
+    assert convo["summary"] is not None
+
+
+def test_save_conversations_searching(db_conn):
+    conv_id = save_conversation(
+        db_conn, "searching convo testing full log", "search convo testing", "cli"
+    )
+    my_search = search(db_conn, "searching")
+    assert my_search is not None
+    assert conv_id == my_search[0]["id"]
+
+
+def test_tag_saving(db_conn):
+    conv_id = save_conversation(db_conn, "tag testing full log tag test", "tag testing")
+    tags = get_tags(db_conn, conv_id)
+    assert "tag" in tags
