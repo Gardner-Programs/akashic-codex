@@ -20,16 +20,25 @@ SQLite (single local file you own) + `sqlite-vec` for semantic search + a fixed 
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+```
 
-python -m akashic_codex.cli init                       # create the database
-python -m akashic_codex.cli save chat.txt --source claude
-python -m akashic_codex.cli search "the database decision"
-python -m akashic_codex.cli show 1
+The CLI (`init` / `save` / `search` / `show`) is the next milestone. For now the Python API works end to end:
+
+```python
+from akashic_codex import db, ingest
+from akashic_codex.search import search
+
+db.init_db()                 # create the database
+conn = db.connect()
+
+ingest.save_conversation(conn, open("chat.txt").read(), title="My chat", source="claude")
+for hit in search(conn, "the database decision"):
+    print(hit["id"], hit["title"])
 ```
 
 ## Status
 
-Scaffold stage. Structure, schema, and stubs are in place; the implementation is being built out module by module. See `docs/DESIGN.md` for the architecture and the build roadmap.
+Active development. The core is built and tested: storage, embeddings, hybrid search (SQLite FTS5 keyword + `sqlite-vec` semantic, merged with reciprocal rank fusion), and the ingest pipeline (`save_conversation`: summarize, tag, embed, store). CI runs ruff and pytest on every change. Next up is the CLI, then a REST API and an MCP server. See `docs/DESIGN.md` for the architecture and full roadmap.
 
 ## Layout
 

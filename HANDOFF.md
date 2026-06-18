@@ -23,15 +23,15 @@ Retrieval is two-tier and hybrid: search ranks lightweight summaries first (keyw
 
 ## Current state
 
-Scaffold only. Structure, `schema.sql`, README, `docs/DESIGN.md`, and stubbed modules are committed (first commit done). Package imports cleanly. Every stub raises `NotImplementedError` with TODOs describing what to build. The `data/*.db` file is gitignored.
+Roadmap steps 1-5 done and tested: core storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), and the ingest pipeline (`save_conversation` end to end). `summarize`/`suggest_tags` are simple placeholders behind a seam for a future local model. Public repo on GitHub (`Gardner-Programs/akashic-codex`) with CI (ruff + pytest) and an issue/PR workflow. The `data/*.db` file is gitignored.
 
 ## Files
 
-`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,cli}.py`, `tests/test_smoke.py`, `docs/DESIGN.md` (full 9-step roadmap).
+`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,cli}.py`, `tests/{test_smoke,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap), `.github/workflows/ci.yml`.
 
 ## Next step
 
-The user wants to write the implementation themselves with help as needed. Start at roadmap step 1: implement `db.connect` and `db.init_db`, then prove a save/read round trip with a test. Do NOT dump full implementations unprompted; guide and assist.
+Step 6: the CLI. Wire `init` / `save` / `search` / `show` into a command-line entry point (`cli.py`) over the existing core. The user writes the implementation themselves; do NOT dump full implementations unprompted, guide and review.
 
 ## User preferences
 
