@@ -1,9 +1,11 @@
 """Embedding generation.
 
-The single most important rule in this project: pick ONE embedding model and use
-it for everything written to and queried against the store. Vectors from different
-models live in different spaces and are NOT comparable. A local model keeps you
-vendor-independent, which is the whole point of AkashicCodex.
+The single most important rule in this project: the store uses exactly ONE
+embedding model, consistently, for everything written and queried. Vectors from
+different models live in different spaces and are NOT comparable, so they must
+never be mixed. Which model is yours to choose (AKASHIC_EMBEDDING_MODEL), and a
+local default keeps you vendor-independent. But the choice is fixed for a store's
+lifetime: changing it means re-embedding every summary, not mixing old and new.
 """
 
 import os
