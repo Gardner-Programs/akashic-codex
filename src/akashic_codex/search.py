@@ -69,8 +69,3 @@ def fuse(ranked_lists: list[list[int]], k: int = 60) -> list[int]:
             score = 1 / (k + rank)
             scores[id] = scores.get(id, 0) + score
     return sorted(scores, key=scores.get, reverse=True)
-
-
-def get_conversation(conversation_id: int) -> dict:
-    """Load one full conversation by id (tier 2 -- call only on a confirmed match)."""
-    raise NotImplementedError
