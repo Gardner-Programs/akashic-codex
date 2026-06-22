@@ -5,6 +5,12 @@ import pytest
 from akashic_codex.db import connect, init_db, insert_conversation, insert_vector
 from akashic_codex.embeddings import embed
 
+EMBED_DIM = 384  # all-MiniLM-L6-v2 / the FLOAT[384] in schema.sql
+
+
+def fake_embed(text: str) -> list[float]:
+    return [0.1] * EMBED_DIM
+
 
 @pytest.fixture
 def db_conn(tmp_path):
@@ -28,3 +34,9 @@ def seeded_conn(db_conn):
         cid = insert_conversation(db_conn, title, log)
         insert_vector(db_conn, cid, embed(title))
     return db_conn
+
+
+@pytest.fixture
+def mock_embed(monkeypatch):
+    monkeypatch.setattr("akashic_codex.ingest.embed", fake_embed)
+    monkeypatch.setattr("akashic_codex.search.embed", fake_embed)

@@ -8,6 +8,12 @@ requires-python = ">=3.10"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+filterwarnings = [
+    # Third-party only: Starlette's TestClient warns about a future httpx2
+    # migration we don't control. Silence just this one; all other warnings
+    # (including our own deprecations) stay visible.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.ruff]
 line-length = 100
@@ -18,3 +24,15 @@ src = ["src", "tests"]
 # E/W: pycodestyle, F: pyflakes, I: import sorting, UP: pyupgrade,
 # B: bugbear (likely bugs), SIM: simplifications.
 select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency/parameter helpers are designed to be called in argument
+# defaults; that is the framework's intended pattern, not the B008 footgun.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+]
