@@ -10,7 +10,7 @@ The idea: your conversation history shouldn't live inside any one AI. AkashicCod
 
 Conversations are stored with a title, auto-generated topic tags, and a short summary alongside the full transcript. Search happens in two tiers: first it ranks the lightweight summaries (fast and cheap), then it loads the full transcript only for a match (expensive, done rarely). Search is hybrid: keyword search via SQLite FTS5 for precision, plus semantic vector search via `sqlite-vec` so it finds the right conversation even when you phrase things differently than you did before.
 
-Any model talks to the same simple core (save, search, get) through whichever interface fits: a CLI, a REST API, and (planned) an MCP server. No model-specific logic lives in the store, which is what makes models swappable.
+Any model talks to the same simple core (save, search, get) through whichever interface fits: a CLI, a REST API, and an MCP server. No model-specific logic lives in the store, which is what makes models swappable.
 
 ## Stack
 
@@ -36,7 +36,7 @@ python -m akashic_codex.cli show 1
 ### REST API
 
 ```bash
-python -m akashic_codex.cli serve --reload     # serves on http://127.0.0.1:8000
+python -m akashic_codex.cli serve_api --reload     # serves on http://127.0.0.1:8000
 ```
 
 Open the interactive docs at `http://127.0.0.1:8000/docs`, or call the endpoints directly:
@@ -51,18 +51,49 @@ curl localhost:8000/conversations/1
 
 ![Interactive API docs](docs/images/swagger.png)
 
+### MCP server
+
+Exposes the read side of the store (`search_memory` and `get_conversation`) as
+MCP tools, so any MCP-capable model can recall your stored conversations
+directly. Saving stays on the CLI and REST API by design: over MCP a model can
+recall memory, not mutate it.
+
+The server speaks stdio and is normally launched by the MCP client, not by hand.
+Register it once with your client and it starts on demand.
+
+Claude Code:
+
+```bash
+claude mcp add akashic-codex -- "$(pwd)/.venv/bin/python" -m akashic_codex.cli serve_mcp
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "akashic-codex": {
+      "command": "/absolute/path/to/akashic-codex/.venv/bin/python",
+      "args": ["-m", "akashic_codex.cli", "serve_mcp"]
+    }
+  }
+}
+```
+
+Use absolute paths so the client can find the project's virtualenv.
+
 ## Status
 
-Active development. Roadmap steps 1-7 are built and tested.
+Active development. Roadmap steps 1-8 are built and tested.
 
 - [x] Core storage (SQLite schema, save / read)
 - [x] Keyword search (FTS5)
 - [x] Embeddings + semantic vector search (`sqlite-vec`)
 - [x] Hybrid search (reciprocal rank fusion)
 - [x] Ingest pipeline (`save_conversation`: summarize, tag, embed, store)
-- [x] CLI (`init` / `save` / `search` / `show` / `serve`)
+- [x] CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp`)
 - [x] REST API (FastAPI: save / search / show)
-- [ ] MCP server (expose `search_memory` / `get_conversation` as tools)
+- [x] MCP server (expose `search_memory` / `get_conversation` as tools)
 - [ ] Polish (web view or TUI for demos)
 
 CI runs ruff and pytest on every change. See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture and full roadmap.
@@ -76,8 +107,9 @@ src/akashic_codex/
   embeddings.py            single fixed embedding model
   ingest.py                save pipeline: summarize, tag, embed, store
   search.py                two-tier hybrid retrieval
-  cli.py                   command-line entry point (init/save/search/show/serve)
+  cli.py                   command-line entry point (init/save/search/show/serve_api/serve_mcp)
   api.py                   FastAPI REST layer
+  mcp_server.py            MCP server layer (read-only tools over stdio)
 tests/                     pytest
 docs/DESIGN.md             architecture and roadmap
 ```

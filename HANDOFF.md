@@ -17,17 +17,17 @@ AkashicCodex is a local, model-agnostic memory store for AI conversations. The p
 
 ## Architecture
 
-Layers: model (client, generation only) -> interface (CLI and REST done, MCP next) -> core service (ingest/embed/search) -> `db.py` (only SQLite-specific code) -> SQLite + sqlite-vec.
+Layers: model (client, generation only) -> interface (CLI, REST, and MCP done) -> core service (ingest/embed/search) -> `db.py` (only SQLite-specific code) -> SQLite + sqlite-vec.
 
 Retrieval is two-tier and hybrid: search ranks lightweight summaries first (keyword via FTS5 + semantic via vectors), then loads the full transcript only on a confirmed match. Summaries, tags, and embeddings are generated ONCE at ingest, never at query time.
 
 ## Current state
 
-Roadmap steps 1-7 done and tested: core storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve`), and the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`). `summarize`/`suggest_tags` are still simple placeholders behind a seam for a future local model. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README (CI badge, checkbox roadmap, `/docs` screenshot). 24 tests pass. The `data/*.db` file is gitignored.
+Roadmap steps 1-8 done and tested: core storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp`), the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`), and the MCP server (FastMCP over stdio, read-only tools `search_memory` and `get_conversation`). Note the CLI's API command was renamed `serve` -> `serve_api` when `serve_mcp` was added. `summarize`/`suggest_tags` are still simple placeholders behind a seam for a future local model. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README (CI badge, checkbox roadmap, `/docs` screenshot). The `data/*.db` file is gitignored.
 
 ## Files
 
-`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,cli,api}.py`, `tests/{test_smoke,test_cli,test_api,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
+`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,cli,api,mcp_server}.py`, `tests/{test_smoke,test_cli,test_api,test_mcp,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
 
 ## Testing approach
 
@@ -40,7 +40,11 @@ Tests mock the embedder for speed and to stay offline: a `mock_embed` fixture in
 
 ## Next step
 
-Step 8: the MCP server. Expose `search_memory` and `get_conversation` as MCP tools over the existing core, so any MCP-capable model can use the store directly. Same pattern as the CLI and API: a thin interface over the core, no storage/search logic in the interface layer. The user writes the implementation themselves; do NOT dump full implementations unprompted, guide and review.
+Step 9: polish. A small web view or TUI for demos, plus README screenshots, to make the store easy to show off.
+
+Also strongly worth doing soon (not on the numbered roadmap, see DESIGN.md stretch ideas): **auto-save / import adapters.** The MCP server is recall-only; nothing yet captures conversations automatically, so the store is only as useful as the manual `cli save` habit. The highest-value, fully-in-your-control path is a Claude Code hook (`SessionEnd`/`Stop`) that ingests the session transcript. Key prerequisite to design first: dedup, a live conversation grows over many turns, so an importer needs a stable external session id and an *upsert* (update the existing row) instead of inserting duplicates. That upsert-by-session-id need is the natural trigger for the deferred `store_meta` and structured `messages` decisions below.
+
+The user writes the implementation themselves; do NOT dump full implementations unprompted, guide and review.
 
 ## Conventions
 

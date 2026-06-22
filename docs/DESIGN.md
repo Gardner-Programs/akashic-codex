@@ -15,7 +15,7 @@ Three design priorities, in order:
 ```
    AI model (Claude / Gemini / Ollama / ...)   <- generation only; just a client
                   |
-        interface (CLI now -> REST -> MCP)      <- stable contract: save, search, get
+        interface (CLI + REST + MCP)            <- stable contract: save, search, get
                   |
           core service (Python)                 <- ingest, embed, search
                   |
