@@ -1,10 +1,12 @@
 """Command-line entry point. The fastest way to test the store as you build.
 
-Planned usage:
+Usage:
     python -m akashic_codex.cli init
     python -m akashic_codex.cli save <file.txt> --title "..." --source claude
     python -m akashic_codex.cli search "what did I decide about the database?"
     python -m akashic_codex.cli show <id>
+    python -m akashic_codex.cli serve_api [--host ... --port ... --reload]
+    python -m akashic_codex.cli serve_mcp
 """
 
 import argparse
@@ -22,11 +24,18 @@ def cmd_init(args):
     print("Database Initialized")
 
 
-def cmd_serve(args):
+def cmd_serve_api(args):
     """Start the HTTP API server."""
     import uvicorn
 
     uvicorn.run("akashic_codex.api:app", host=args.host, port=args.port, reload=args.reload)
+
+
+def cmd_serve_mcp(args):
+    """Start the MCP server over stdio (normally launched by an MCP client)."""
+    from akashic_codex.mcp_server import run_mcp
+
+    run_mcp()
 
 
 def cmd_save(args):
@@ -83,11 +92,14 @@ def main() -> None:
     p_show.add_argument("id", type=int)
     p_show.set_defaults(func=cmd_show)
 
-    p_serve = sub.add_parser("serve", help="start the HTTP API server")
+    p_serve = sub.add_parser("serve_api", help="start the HTTP API server")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8000)
     p_serve.add_argument("--reload", action="store_true", help="auto-restart on code change (dev)")
-    p_serve.set_defaults(func=cmd_serve)
+    p_serve.set_defaults(func=cmd_serve_api)
+
+    p_serve_mcp = sub.add_parser("serve_mcp", help="start the MCP server")
+    p_serve_mcp.set_defaults(func=cmd_serve_mcp)
 
     args = parser.parse_args()
     try:

@@ -73,3 +73,21 @@ def test_cli_roundtrip(cli_db, tmp_path, monkeypatch, capsys):
     run(monkeypatch, "show", "1")
     out = capsys.readouterr().out
     assert "DB choice" in out and "SQLite" in out
+
+
+def test_serve_mcp_launches_server(monkeypatch):
+    ran = {}
+    monkeypatch.setattr("akashic_codex.mcp_server.db.init_db", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "akashic_codex.mcp_server.mcp.run", lambda *a, **k: ran.setdefault("ok", True)
+    )
+    run(monkeypatch, "serve_mcp")
+    assert ran["ok"]
+
+
+def test_serve_api_launches_server(monkeypatch):
+    captured = {}
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: captured.update(a=a, k=k))
+    run(monkeypatch, "serve_api")
+    assert captured["a"][0] == "akashic_codex.api:app"
+    assert captured["k"]["port"] == 8000

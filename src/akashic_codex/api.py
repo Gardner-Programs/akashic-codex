@@ -6,7 +6,7 @@ each endpoint translates the request, calls db / ingest / search, and returns
 JSON (or raises an HTTPException). The schema is created once at startup.
 
 Run with:  uvicorn akashic_codex.api:app --reload
-       or:  python -m akashic_codex.cli serve
+       or:  python -m akashic_codex.cli serve_api
 """
 
 import sqlite3
