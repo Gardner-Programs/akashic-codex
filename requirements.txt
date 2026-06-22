@@ -13,6 +13,10 @@ sentence-transformers
 fastapi
 uvicorn
 
+# MCP server layer: exposes the store's read tools to MCP-capable clients.
+# Bundles FastMCP (the decorator-based server) and the stdio transport.
+mcp
+
 # Dev / testing
 pytest
 ruff
