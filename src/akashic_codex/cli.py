@@ -22,6 +22,13 @@ def cmd_init(args):
     print("Database Initialized")
 
 
+def cmd_serve(args):
+    """Start the HTTP API server."""
+    import uvicorn
+
+    uvicorn.run("akashic_codex.api:app", host=args.host, port=args.port, reload=args.reload)
+
+
 def cmd_save(args):
     """Store a conversation read from a file; print its new id."""
     conn = db.connect()
@@ -75,6 +82,12 @@ def main() -> None:
     p_show = sub.add_parser("show", help="print a full conversation by id")
     p_show.add_argument("id", type=int)
     p_show.set_defaults(func=cmd_show)
+
+    p_serve = sub.add_parser("serve", help="start the HTTP API server")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.add_argument("--reload", action="store_true", help="auto-restart on code change (dev)")
+    p_serve.set_defaults(func=cmd_serve)
 
     args = parser.parse_args()
     try:

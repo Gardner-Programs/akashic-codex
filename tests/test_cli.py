@@ -15,7 +15,7 @@ from akashic_codex import db
 
 
 @pytest.fixture
-def cli_db(tmp_path, monkeypatch):
+def cli_db(tmp_path, monkeypatch, mock_embed):
     """Point the CLI's db.connect / db.init_db at a throwaway file db."""
     dbfile = str(tmp_path / "cli.db")
     real_connect = db.connect
