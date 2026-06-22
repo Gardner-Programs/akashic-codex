@@ -1,0 +1,7 @@
+User: How does semantic search actually find things when I use different words than I originally wrote?
+
+Assistant: It turns text into vectors with an embedding model, so similar meanings land near each other in vector space. A query like "how do I keep my chat history" ends up close to a saved note about "persisting conversation logs" even though they share no keywords. You compare vectors by distance and return the nearest ones. Keyword search handles exact terms, semantic search handles rephrasing, and fusing the two rankings gives you the strengths of both.
+
+User: So the embedding model has to be the same one everywhere?
+
+Assistant: Yes. Vectors are only comparable if they came from the same model, so you pick one model and use it for everything written to and queried against the store. Switching models later means re-embedding everything, not mixing old and new vectors.
