@@ -6,6 +6,12 @@ A local, model-agnostic memory store for AI conversations.
 
 The idea: your conversation history shouldn't live inside any one AI. AkashicCodex keeps it in a database you own, on your own machine, so you can switch freely between Claude, Gemini, a local Ollama model, or whatever comes next, and your context follows you. When one model runs out of usage, you switch to another and the memory is still there, because the memory *is* the database, not the model.
 
+## Demo
+
+![AkashicCodex CLI demo](docs/images/demo.gif)
+
+Save conversations from different models, then find one with a query worded nothing like the original. Keyword and semantic search are fused, so the right conversation surfaces even with no shared words.
+
 ## How it works
 
 Conversations are stored with a title, auto-generated topic tags, and a short summary alongside the full transcript. Search happens in two tiers: first it ranks the lightweight summaries (fast and cheap), then it loads the full transcript only for a match (expensive, done rarely). Search is hybrid: keyword search via SQLite FTS5 for precision, plus semantic vector search via `sqlite-vec` so it finds the right conversation even when you phrase things differently than you did before.
@@ -28,10 +34,13 @@ cp .env.example .env
 
 ```bash
 python -m akashic_codex.cli init
-python -m akashic_codex.cli save chat.txt --title "My chat" --source claude
-python -m akashic_codex.cli search "the database decision"
+python -m akashic_codex.cli save examples/sqlite_decision.txt --title "Why we chose SQLite" --source claude
+python -m akashic_codex.cli search "what database did we pick for local storage"
 python -m akashic_codex.cli show 1
 ```
+
+The `examples/` folder has a few sample conversations to try. `docs/demo.sh` is the
+scripted version of the flow above, used to record the demo GIF.
 
 ### REST API
 
@@ -111,5 +120,7 @@ src/akashic_codex/
   api.py                   FastAPI REST layer
   mcp_server.py            MCP server layer (read-only tools over stdio)
 tests/                     pytest
+examples/                  sample conversations to try
 docs/DESIGN.md             architecture and roadmap
+docs/demo.sh               scripted CLI demo (records the GIF)
 ```

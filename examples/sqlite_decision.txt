@@ -1,0 +1,7 @@
+User: I'm building a local memory store for my AI chats. Should I use SQLite or Postgres?
+
+Assistant: For a single-user, local-first tool, SQLite is the better fit. It's a single file you own, there's no server to run or secure, and the one-writer limitation never bites when there's only one user. The main thing you give up is built-in vector search, but the sqlite-vec extension covers that. If you ever outgrow it, the path to Postgres + pgvector stays clean as long as you keep all the SQL in one place.
+
+User: That makes sense. Let's go with SQLite and isolate the database code so a future move stays contained.
+
+Assistant: Good call. Keep every SQLite-specific query behind a single db module, and the rest of the app won't care what's underneath. That one seam is what turns a migration from a rewrite into a contained change.
