@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS conversation_tags (
     PRIMARY KEY (conversation_id, tag_id)
 );
 
+CREATE TABLE IF NOT EXISTS store_meta (
+    key    TEXT PRIMARY KEY NOT NULL,
+    value  TEXT NOT NULL
+);
+
 -- Full-text search over title + summary (keyword search, high precision).
 -- TODO: keep this in sync with conversations via triggers, or rebuild on ingest.
 CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(

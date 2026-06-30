@@ -8,7 +8,7 @@ keep this to a single simple step (paste, file drop, or batch export).
 import sqlite3
 
 from akashic_codex import db
-from akashic_codex.embeddings import embed
+from akashic_codex.embeddings import MODEL_NAME, embed
 
 
 def summarize(full_log: str) -> str:
@@ -54,6 +54,29 @@ def suggest_tags(full_log: str) -> list[str]:
     return sorted(common, key=common.get, reverse=True)[:5]
 
 
+def ensure_embedder_identity(conn: sqlite3.Connection, vector: list[float]) -> None:
+    """Record which model built this store's vectors, exactly once.
+
+    Idempotent: on the first call (an unstamped store) this writes the embedder
+    identity into store_meta as two rows, the model name and the vector
+    dimension; on every later call it is a no-op. A store commits to one
+    embedding model for its lifetime, so this identity is what the search layer
+    later checks against to refuse mixing incomparable vectors.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    vector : list of float
+        A freshly produced embedding; its length is recorded as the store's
+        embedding dimension, so the dimension stays derived from a real vector
+        rather than hardcoded.
+    """
+    if db.get_meta(conn, "embedding_model") is None:
+        db.set_meta(conn, "embedding_model", MODEL_NAME)
+        db.set_meta(conn, "embedding_dim", str(len(vector)))
+
+
 def save_conversation(
     conn: sqlite3.Connection, full_log: str, title: str | None = None, source: str | None = None
 ) -> int:
@@ -88,5 +111,6 @@ def save_conversation(
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)
     vector = embed(summary)
+    ensure_embedder_identity(conn, vector)
     db.insert_vector(conn, conv_id, vector)
     return conv_id

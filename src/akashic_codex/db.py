@@ -334,3 +334,57 @@ def search_vectors(
         (sqlite_vec.serialize_float32(query_vector), limit),
     ).fetchall()
     return rows
+
+
+def set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Write a store-level metadata value, creating or overwriting the key.
+
+    Generic key/value setter for the store_meta table; this layer stays
+    decoupled from what the keys mean (embedder identity, schema version, and
+    so on). Upserts on the key, so calling it again for an existing key
+    overwrites the value rather than raising a UNIQUE constraint error.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    key : str
+        The metadata key (for example "embedding_model").
+    value : str
+        The value to store; always text.
+    """
+    with conn:
+        conn.execute(
+            """INSERT INTO store_meta
+            (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (key, value),
+        )
+
+
+def get_meta(conn: sqlite3.Connection, key: str) -> str | None:
+    """Read a store-level metadata value by key.
+
+    Generic key/value getter for the store_meta table. Returns the stored
+    value as text, or None if the key has never been set.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    key : str
+        The metadata key to look up.
+
+    Returns
+    -------
+    str or None
+        The stored value, or None if the key is absent.
+    """
+    row = conn.execute(
+        """SELECT value
+            FROM store_meta
+            WHERE key = ?
+            """,
+        (key,),
+    ).fetchone()
+    return row["value"] if row else None
