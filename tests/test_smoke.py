@@ -5,19 +5,23 @@ Run with:  pytest
 
 import re
 
+import pytest
+
 from akashic_codex import __version__
 from akashic_codex.db import (
     SCHEMA_PATH,
     get_conversation,
+    get_meta,
     get_tags,
     insert_conversation,
     insert_vector,
     search_fts,
     search_vectors,
+    set_meta,
 )
-from akashic_codex.embeddings import embed
-from akashic_codex.ingest import save_conversation
-from akashic_codex.search import fuse, search
+from akashic_codex.embeddings import MODEL_NAME, embed
+from akashic_codex.ingest import ensure_embedder_identity, save_conversation
+from akashic_codex.search import assert_active_embedder, fuse, search
 
 
 def test_package_imports():
@@ -116,3 +120,53 @@ def test_tag_saving(db_conn):
     conv_id = save_conversation(db_conn, "tag testing full log tag test", "tag testing")
     tags = get_tags(db_conn, conv_id)
     assert "tag" in tags
+
+
+def test_set_meta_then_get_meta_returns_value(db_conn):
+    assert get_meta(db_conn, "testing") is None
+    set_meta(db_conn, "testing", "test")
+    assert get_meta(db_conn, "testing") == "test"
+
+
+def test_set_meta_upserts_existing_key(db_conn):
+    set_meta(db_conn, "testing", "test")
+    assert get_meta(db_conn, "testing") == "test"
+    set_meta(db_conn, "testing", "test2")
+    assert get_meta(db_conn, "testing") == "test2"
+
+
+def test_ensure_embedder_identity_stamps_fresh_store(db_conn):
+    vector = [0.1]
+    assert not ensure_embedder_identity(db_conn, vector)
+    assert get_meta(db_conn, "embedding_model") == MODEL_NAME
+    assert get_meta(db_conn, "embedding_dim") == str(len(vector))
+
+
+def test_ensure_embedder_identity_is_idempotent(db_conn):
+    vector = [0.1]
+    vector2 = [0.2, 0.3]
+    ensure_embedder_identity(db_conn, vector)
+    assert get_meta(db_conn, "embedding_dim") == str(len(vector))
+    ensure_embedder_identity(db_conn, vector2)
+    assert get_meta(db_conn, "embedding_dim") == str(len(vector))
+
+
+def test_search_guard_allows_matching_model(db_conn):
+    set_meta(db_conn, "embedding_model", MODEL_NAME)
+    assert assert_active_embedder(db_conn) is None
+
+
+def test_search_guard_raises_on_model_mismatch(db_conn):
+    set_meta(db_conn, "embedding_model", "testing_model")
+    with pytest.raises(RuntimeError) as run_error:
+        assert_active_embedder(db_conn)
+    assert "testing_model" in str(run_error.value)
+
+
+def test_search_guard_allows_unstamped_store(db_conn):
+    assert assert_active_embedder(db_conn) is None
+
+
+def test_save_conversation_stamps_embedder_identity(db_conn):
+    save_conversation(db_conn, "full_log")
+    assert get_meta(db_conn, "embedding_model") == MODEL_NAME

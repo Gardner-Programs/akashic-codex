@@ -9,9 +9,20 @@ Hybrid search = keyword (FTS, precise) + semantic (vectors, catches rephrasing).
 import sqlite3
 
 from akashic_codex import db
-from akashic_codex.embeddings import embed
+from akashic_codex.embeddings import MODEL_NAME, embed
 
 CANDIDATE_POOL = 20
+
+
+def assert_active_embedder(conn: sqlite3.Connection) -> None:
+    """Refuse to search if the active model isn't the one that built the store."""
+    stored = db.get_meta(conn, "embedding_model")
+    if stored is not None and stored != MODEL_NAME:
+        raise RuntimeError(
+            f"This store's vectors were built with '{stored}', but the active "
+            f"embedding model is '{MODEL_NAME}'. Searching would compare "
+            f"incomparable vectors. Re-embed the store or restore the original model."
+        )
 
 
 def search(conn: sqlite3.Connection, query: str, limit: int = 5) -> list[dict]:
@@ -36,6 +47,7 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 5) -> list[dict]:
     list[dict]
         Lightweight result rows (id, title, summary), most relevant first.
     """
+    assert_active_embedder(conn)
     fts_rows = db.search_fts(conn, query, CANDIDATE_POOL)
     vec_rows = db.search_vectors(conn, embed(query), CANDIDATE_POOL)
     fts_ids = [row["id"] for row in fts_rows]
