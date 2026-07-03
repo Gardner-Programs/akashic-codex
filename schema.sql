@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     title       TEXT NOT NULL,
     summary     TEXT,                         -- generated once at ingest time
     source      TEXT,                         -- which model/app it came from (claude, gemini, ollama, ...)
+    summarizer  TEXT,   -- which summarizer backend produced the summary
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     full_log    TEXT NOT NULL                 -- the complete transcript
 );

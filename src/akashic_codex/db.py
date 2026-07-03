@@ -67,7 +67,7 @@ def init_db(db_path: str = DB_PATH) -> None:
 
 
 def insert_conversation(
-    conn: sqlite3.Connection, title: str, full_log: str, summary=None, source=None
+    conn: sqlite3.Connection, title: str, full_log: str, summarizer=None, summary=None, source=None
 ) -> int:
     """Insert a conversation and return its new auto-generated id.
 
@@ -83,6 +83,9 @@ def insert_conversation(
         Human-readable title (indexed for keyword search).
     full_log : str
         The complete transcript text.
+    summarizer : str or None, optional
+        Identifier of the summarizer backend that produced the summary,
+        recorded as per-conversation provenance.
     summary : str or None, optional
         Short summary (indexed for keyword search; pass it here so the FTS
         trigger picks it up at insert time).
@@ -96,8 +99,9 @@ def insert_conversation(
     """
     with conn:
         cur = conn.execute(
-            "INSERT INTO conversations (title, full_log, summary, source) VALUES (?, ?, ?, ?)",
-            (title, full_log, summary, source),
+            """INSERT INTO conversations (title, full_log, summarizer, summary, source)
+            VALUES (?, ?, ?, ?, ?)""",
+            (title, full_log, summarizer, summary, source),
         )
     return cur.lastrowid
 
