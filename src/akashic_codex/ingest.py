@@ -9,27 +9,7 @@ import sqlite3
 
 from akashic_codex import db
 from akashic_codex.embeddings import MODEL_NAME, embed
-
-
-def summarize(full_log: str) -> str:
-    """Produce a short summary of a conversation.
-
-    Placeholder implementation: returns the first 200 characters. This is the
-    seam where a real (local) summarizer plugs in later; the rest of the pipeline
-    does not depend on how the summary is produced. The summary is generated once
-    at ingest and is what search ranks over, never regenerated at query time.
-
-    Parameters
-    ----------
-    full_log : str
-        The complete conversation transcript.
-
-    Returns
-    -------
-    str
-        A short summary of the conversation.
-    """
-    return full_log[:200]
+from akashic_codex.summarizers import SUMMARIZER, summarize
 
 
 def suggest_tags(full_log: str) -> list[str]:
@@ -106,7 +86,9 @@ def save_conversation(
         title = "Untitled"
     summary = summarize(full_log)
     tags = suggest_tags(full_log)
-    conv_id = db.insert_conversation(conn, title, full_log, summary=summary, source=source)
+    conv_id = db.insert_conversation(
+        conn, title, full_log, summarizer=SUMMARIZER, summary=summary, source=source
+    )
     for tag in tags:
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)

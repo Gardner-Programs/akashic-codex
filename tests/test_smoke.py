@@ -3,7 +3,10 @@
 Run with:  pytest
 """
 
+import io
 import re
+import urllib.error
+import urllib.request
 
 import pytest
 
@@ -22,6 +25,13 @@ from akashic_codex.db import (
 from akashic_codex.embeddings import MODEL_NAME, embed
 from akashic_codex.ingest import ensure_embedder_identity, save_conversation
 from akashic_codex.search import assert_active_embedder, fuse, search
+from akashic_codex.summarizers import (
+    SUMMARIZER,
+    SUMMARY_MAX_CHARS,
+    _extractive,
+    _ollama,
+    summarize,
+)
 
 
 def test_package_imports():
@@ -170,3 +180,74 @@ def test_search_guard_allows_unstamped_store(db_conn):
 def test_save_conversation_stamps_embedder_identity(db_conn):
     save_conversation(db_conn, "full_log")
     assert get_meta(db_conn, "embedding_model") == MODEL_NAME
+
+
+def test_extractive_summarizes_multi_sentence_within_budget():
+    # Arthur Conan Doyle, A Scandal in Bohemia
+    text = (
+        "You see, but you do not observe. The distinction is clear. "
+        "For example, you have frequently seen the steps which lead up from "
+        "the hall to this room. How often? Well, some hundreds of times. "
+        "Then how many are there? I don't know. Quite so! You have not "
+        "observed. And yet you have seen. That is just my point. Now, I know "
+        "that there are seventeen steps, because I have both seen and observed."
+    )
+    # the input is longer than the budget, so a correct summary must trim it
+    assert len(text) > SUMMARY_MAX_CHARS
+    result = _extractive(text)
+    assert result
+    assert len(result) <= SUMMARY_MAX_CHARS
+    assert len(result) < len(text)
+
+
+def test_extractive_returns_empty_for_empty_input():
+    assert _extractive("") == ""
+
+
+def test_summarize_defaults_to_extractive(monkeypatch):
+    monkeypatch.setattr("akashic_codex.summarizers.SUMMARIZER", "extractive")
+    # Terry Pratchett, Night Watch
+    text = (
+        "Sometimes it's like watching a wasp land on a stinging nettle: "
+        "someone's going to get stung and you don't care."
+    )
+    assert summarize(text) == _extractive(text)
+
+
+def test_summarize_raises_on_unknown_backend(monkeypatch):
+    monkeypatch.setattr("akashic_codex.summarizers.SUMMARIZER", "bogus")
+    with pytest.raises(ValueError):
+        summarize("Something happened. Then more happened.")
+
+
+def test_ollama_returns_model_response(monkeypatch):
+    # Terry Pratchett, Snuff
+    conversation = (
+        "That just goes to show that you never know, although what it is "
+        "we never know I suspect we'll never know."
+    )
+    fake_response = io.BytesIO(b'{"response": "a mocked summary"}')
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request: fake_response)
+    assert _ollama(conversation, "llama3") == "a mocked summary"
+
+
+def test_ollama_fails_loud_when_unreachable(monkeypatch):
+    def unreachable(request):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", unreachable)
+    with pytest.raises(RuntimeError):
+        _ollama("User: hi. Assistant: hello.", "llama3")
+
+
+def test_save_conversation_records_summarizer_provenance(db_conn):
+    # Terry Pratchett, Jingo
+    text = (
+        "Men marched away, Vimes. And men marched back. How glorious the "
+        "battles would have been that they never had to fight!"
+    )
+    conv_id = save_conversation(db_conn, text)
+    row = db_conn.execute(
+        "SELECT summarizer FROM conversations WHERE id = ?", (conv_id,)
+    ).fetchone()
+    assert row["summarizer"] == SUMMARIZER
