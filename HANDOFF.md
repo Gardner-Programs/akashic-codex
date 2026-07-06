@@ -23,28 +23,42 @@ Retrieval is two-tier and hybrid: search ranks lightweight summaries first (keyw
 
 ## Current state
 
-Roadmap steps 1-8 done and tested: core storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp`), the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`), and the MCP server (FastMCP over stdio, read-only tools `search_memory` and `get_conversation`). Note the CLI's API command was renamed `serve` -> `serve_api` when `serve_mcp` was added. `summarize`/`suggest_tags` are still simple placeholders behind a seam for a future local model. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README (CI badge, checkbox roadmap, `/docs` screenshot). The `data/*.db` file is gitignored.
+Roadmap steps 1-9 done and tested, plus two quality-of-life features shipped since. Core: storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp`), the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`), and the MCP server (FastMCP over stdio, read-only tools `search_memory` and `get_conversation`).
+
+Shipped since the numbered roadmap:
+- **Embedder identity + search guard (PR #16):** a generic `store_meta(key, value)` table with `db.get_meta`/`set_meta` (upsert via `ON CONFLICT`). `ingest.ensure_embedder_identity` stamps `embedding_model` + `embedding_dim` once at first ingest (dimension taken from the real vector; `db.py` never imports `embeddings`, staying decoupled). `search.assert_active_embedder` raises `RuntimeError` if the active model differs from the stored one, lenient (no-op) when unstamped.
+- **Real pluggable summarizer (PR #22):** replaced the `full_log[:200]` placeholder. `src/akashic_codex/summarizers.py` exposes an `AKASHIC_SUMMARIZER` seam. Default `extractive`: sentence-split, embed each, rank by cosine similarity to the centroid of all sentence vectors, select within a ~300-char budget in document order (offline, no new deps). Optional `ollama:<model>`: abstractive via a local Ollama server over stdlib `urllib`, fail-loud (`RuntimeError`) on error, `AKASHIC_OLLAMA_HOST` overrides the endpoint. Each conversation records its `summarizer` backend in a new column (the summarizer may vary between saves, unlike the fixed embedder). `suggest_tags` is still a placeholder seam.
+
+45 tests, ruff clean. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
 
 ## Files
 
-`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,cli,api,mcp_server}.py`, `tests/{test_smoke,test_cli,test_api,test_mcp,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
+`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,summarizers,cli,api,mcp_server}.py`, `tests/{test_smoke,test_cli,test_api,test_mcp,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
+
+## Commands
+
+- Setup: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`, then `cp .env.example .env`.
+- Tests: `pytest -q`. Lint: `ruff check src tests` and `ruff format --check src tests`.
+- CLI: `python -m akashic_codex.cli {init | save <file> --title "..." | search <query> | show <id> | serve_api | serve_mcp}`.
+- Config (env vars, see `.env.example`): `AKASHIC_DB_PATH`, `AKASHIC_EMBEDDING_MODEL` (fixed per store), `AKASHIC_SUMMARIZER` (`extractive` | `ollama:<model>`), `AKASHIC_OLLAMA_HOST`.
 
 ## Testing approach
 
-Tests mock the embedder for speed and to stay offline: a `mock_embed` fixture in `conftest.py` patches `embed` at its usage sites (`ingest.embed`, `search.embed`, the from-import binding, not `embeddings.embed`) with a deterministic 384-dim vector, wired into the `cli_db` (test_cli) and `client` (test_api) isolation fixtures. Three semantic tests in `test_smoke.py` keep the REAL model as integration coverage; never mock those. CLI tests drive `main()` via patched `sys.argv`; API tests use FastAPI `TestClient` + `dependency_overrides` on `get_conn`.
+A `mock_embed` fixture in `conftest.py` patches `embed` at its usage sites (`ingest.embed`, `search.embed`, not `embeddings.embed`) with a deterministic 384-dim vector, wired into the `cli_db` (test_cli) and `client` (test_api) isolation fixtures. `test_smoke.py` uses the REAL model as integration coverage (including the extractive summarizer). The Ollama backend is tested offline by monkeypatching `urllib.request.urlopen` (a `BytesIO` holding fake JSON for the success case, a function raising `URLError` for fail-loud), so CI never needs a server. Dispatch tests monkeypatch the module-level `summarizers.SUMMARIZER`. CLI tests drive `main()` via patched `sys.argv`; API tests use FastAPI `TestClient` + `dependency_overrides` on `get_conn`.
 
-## Deferred decisions (logged in DESIGN.md, build later)
+## Deferred decisions (logged in DESIGN.md)
 
-- **Embedder identity / `store_meta`:** the store does not record which embedder built its vectors. This is the prerequisite (step zero) for the re-embed / model-swap feature. Add a small `store_meta` table via generic `db.get_meta`/`set_meta` helpers, before any store the user cares about exists.
-- **Structured messages:** conversations are an opaque `full_log` blob; a `messages` table (role + per-turn `model`) would support swapping models mid-conversation and precise context re-injection once a chat exceeds a model's window. Keep `full_log` as the source of truth. Trigger: import adapters or a render/chat UI.
+- **Embedder identity / `store_meta`: DONE (PR #16).** Now the prerequisite for the re-embed / model-swap command (backlog #18).
+- **Structured messages:** conversations are an opaque `full_log` blob; a `messages` table (role + per-turn `model`) would support swapping models mid-conversation and precise context re-injection once a chat exceeds a model's window. Keep `full_log` as the source of truth. Trigger: import adapters or a render/chat UI. Backlog #20.
+- **No schema migrations yet:** schema changes rely on `CREATE TABLE IF NOT EXISTS`, which cannot alter an existing DB. Adding the `summarizer` column to a store created before PR #22 needed a manual `ALTER TABLE conversations ADD COLUMN summarizer TEXT`. A fresh `init` is fine; a lightweight migration story is worth adding once there's real data that can't just be recreated.
 
 ## Next step
 
-Step 9: polish. A small web view or TUI for demos, plus README screenshots, to make the store easy to show off.
+**Backlog (GitHub issues):** #18 re-embed command (unblocked now `store_meta` exists), #19 auto-save hook, #20 structured messages, #21 import adapters. Plus follow-ups: improve extractive summarization on structured/dialogue text (it fragments on headers/lists), and a soft length cap for the Ollama backend (the prompt asks for brevity but models do not obey it precisely).
 
-Also strongly worth doing soon (not on the numbered roadmap, see DESIGN.md stretch ideas): **auto-save / import adapters.** The MCP server is recall-only; nothing yet captures conversations automatically, so the store is only as useful as the manual `cli save` habit. The highest-value, fully-in-your-control path is a Claude Code hook (`SessionEnd`/`Stop`) that ingests the session transcript. Key prerequisite to design first: dedup, a live conversation grows over many turns, so an importer needs a stable external session id and an *upsert* (update the existing row) instead of inserting duplicates. That upsert-by-session-id need is the natural trigger for the deferred `store_meta` and structured `messages` decisions below.
+**Immediate next: #19 auto-save via a Claude Code hook.** The store only grows via manual `cli save` today, which is the friction that limits daily use. A `SessionEnd`/`Stop` hook that ingests the session transcript makes capture automatic. Design the dedup first: a live conversation grows over many turns, so the importer needs a stable external session id + an *upsert-by-session-id* (update the existing row) instead of duplicate inserts. That upsert-by-session-id need is the natural trigger for structured `messages` (#20). The user plans to build #19 the weekend of 2026-07-05, then start using the store daily.
 
-The user writes the implementation themselves; do NOT dump full implementations unprompted, guide and review.
+The user writes the implementation themselves; do NOT dump full implementations unprompted, guide and review. For domains they have already internalized (e.g. pytest) they are happy to have tests written for them and review critically; docstrings, commit messages, git mechanics, and scaffolding are also fine to handle for them.
 
 ## Conventions
 
