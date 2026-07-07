@@ -106,6 +106,70 @@ def insert_conversation(
     return cur.lastrowid
 
 
+def upsert_conversation(
+    conn: sqlite3.Connection,
+    session_id: str,
+    title: str,
+    full_log: str,
+    summarizer=None,
+    summary=None,
+    source=None,
+    thread_id=None,
+) -> int:
+    """Insert a conversation, or update the existing row for this session_id.
+
+    The auto-save path calls this once per turn with the same session_id as a
+    live session grows, so it must be an upsert (update in place) rather than a
+    duplicate insert. Returns the conversation id either way. Manual saves that
+    have no session go through insert_conversation instead; this function is the
+    session-keyed path.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    session_id : str
+        Stable per-session id used as the conflict target; one client session
+        maps to exactly one conversations row.
+    title : str
+        Human-readable title.
+    full_log : str
+        The complete transcript text as it stands this turn (overwrites the
+        prior value on update).
+    summarizer : str or None, optional
+        Identifier of the summarizer backend that produced the summary.
+    summary : str or None, optional
+        Short summary (indexed for keyword search).
+    source : str or None, optional
+        Which model or app the conversation came from.
+    thread_id : str or None, optional
+        Logical conversation this session belongs to; None means the session is
+        its own thread.
+
+    Returns
+    -------
+    int
+        The id of the inserted or updated conversations row.
+    """
+    with conn:
+        row = conn.execute(
+            """INSERT INTO conversations
+            (session_id, title, full_log, summarizer, summary, source, thread_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+            title = excluded.title,
+            full_log = excluded.full_log,
+            summarizer = excluded.summarizer,
+            summary = excluded.summary,
+            source = excluded.source,
+            thread_id = excluded.thread_id
+            RETURNING id
+            """,
+            (session_id, title, full_log, summarizer, summary, source, thread_id),
+        ).fetchone()
+    return row["id"]
+
+
 def get_or_create_tag(conn: sqlite3.Connection, name: str) -> int:
     """Return the id of a tag, creating it if it does not exist.
 
@@ -303,6 +367,29 @@ def insert_vector(conn: sqlite3.Connection, conv_id: int, vector: list[float]) -
             """INSERT INTO summary_vectors
             (conversation_id, embedding) VALUES (?, ?)""",
             (conv_id, sqlite_vec.serialize_float32(vector)),
+        )
+
+
+def delete_vector(conn: sqlite3.Connection, conv_id: int) -> None:
+    """Remove a conversation's stored embedding vector, if it has one.
+
+    Paired with insert_vector to replace a vector on the auto-save update path:
+    summary_vectors.conversation_id is a primary key, so a changed summary
+    cannot be re-inserted over the old vector directly. Delete the existing row
+    first, then insert the fresh embedding. A no-op when no vector is stored.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    conv_id : int
+        Id of the conversation whose vector should be removed.
+    """
+    with conn:
+        conn.execute(
+            """DELETE FROM summary_vectors
+            WHERE conversation_id = ?""",
+            (conv_id,),
         )
 
 

@@ -96,3 +96,58 @@ def save_conversation(
     ensure_embedder_identity(conn, vector)
     db.insert_vector(conn, conv_id, vector)
     return conv_id
+
+
+def save_session(conn, session_id, full_log, title=None, source=None, thread_id=None) -> int:
+    """Store or update a session's conversation end to end and return its id.
+
+    The session-keyed sibling of save_conversation, used by the auto-save path:
+    called once per turn with the same session_id as a live session grows, so it
+    upserts (insert on the first turn, update in place after) instead of creating
+    duplicate rows. Runs the full pipeline each time: summarize, suggest tags,
+    upsert the conversation (with the summary, so the FTS triggers index it), link
+    its tags, embed the summary, and replace the stored vector.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    session_id : str
+        Stable per-session id; the same value across a session's turns updates the
+        one row rather than inserting a new one.
+    full_log : str
+        The complete conversation transcript as it stands this turn.
+    title : str or None, optional
+        Title for the conversation; a default is used if not given.
+    source : str or None, optional
+        Which model or app the conversation came from.
+    thread_id : str or None, optional
+        Logical conversation this session belongs to; None means its own thread.
+
+    Returns
+    -------
+    int
+        The id of the stored (inserted or updated) conversation.
+    """
+    if not title:
+        title = "Untitled"
+    summary = summarize(full_log)
+    tags = suggest_tags(full_log)
+    conv_id = db.upsert_conversation(
+        conn,
+        session_id,
+        title,
+        full_log,
+        summarizer=SUMMARIZER,
+        summary=summary,
+        source=source,
+        thread_id=thread_id,
+    )
+    for tag in tags:
+        tag_id = db.get_or_create_tag(conn, tag)
+        db.link_conversation_tag(conn, conv_id, tag_id)
+    vector = embed(summary)
+    ensure_embedder_identity(conn, vector)
+    db.delete_vector(conn, conv_id)
+    db.insert_vector(conn, conv_id, vector)
+    return conv_id

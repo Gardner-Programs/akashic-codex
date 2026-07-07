@@ -5,11 +5,13 @@
 CREATE TABLE IF NOT EXISTS conversations (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     title       TEXT NOT NULL,
-    summary     TEXT,                         -- generated once at ingest time
-    source      TEXT,                         -- which model/app it came from (claude, gemini, ollama, ...)
-    summarizer  TEXT,   -- which summarizer backend produced the summary
+    summary     TEXT,                          -- generated once at ingest time
+    source      TEXT,                          -- which model/app it came from (claude, gemini, ollama, ...)
+    summarizer  TEXT,                          -- which summarizer backend produced the summary
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    full_log    TEXT NOT NULL                 -- the complete transcript
+    session_id  TEXT UNIQUE,                   -- per-session upsert key for auto-save (NULL for manual saves)
+    thread_id   TEXT,                          -- logical conversation spanning sessions/models (NULL = own thread)
+    full_log    TEXT NOT NULL                  -- the complete transcript
 );
 
 -- Tags, many-to-many with conversations.
@@ -30,7 +32,7 @@ CREATE TABLE IF NOT EXISTS store_meta (
 );
 
 -- Full-text search over title + summary (keyword search, high precision).
--- TODO: keep this in sync with conversations via triggers, or rebuild on ingest.
+-- Kept in sync with conversations by the three triggers below (insert/delete/update).
 CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
     title,
     summary,
@@ -45,6 +47,22 @@ BEGIN
     VALUES (new.id, new.title, new.summary);
 END;
 
+CREATE TRIGGER IF NOT EXISTS conversations_ad
+AFTER DELETE ON conversations
+BEGIN
+    INSERT INTO conversations_fts(conversations_fts, rowid, title, summary)
+    VALUES ('delete', old.id, old.title, old.summary);
+END;
+
+CREATE TRIGGER IF NOT EXISTS conversations_au
+AFTER UPDATE ON conversations
+BEGIN
+    INSERT INTO conversations_fts(conversations_fts, rowid, title, summary)
+    VALUES ('delete', old.id, old.title, old.summary);
+    INSERT INTO conversations_fts(rowid, title, summary)
+    VALUES (new.id, new.title, new.summary);
+END;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS summary_vectors USING vec0(
     conversation_id INTEGER PRIMARY KEY,
     embedding FLOAT[384]
@@ -54,4 +72,3 @@ CREATE VIRTUAL TABLE IF NOT EXISTS summary_vectors USING vec0(
 -- Requires the sqlite-vec extension to be loaded at connection time.
 -- TODO: set the dimension to match your chosen embedding model
 --       (all-MiniLM-L6-v2 = 384). Keep one model for the whole DB.
-
