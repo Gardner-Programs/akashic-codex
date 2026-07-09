@@ -4,6 +4,7 @@ Run with:  pytest
 """
 
 import io
+import json
 import re
 import urllib.error
 import urllib.request
@@ -11,8 +12,10 @@ import urllib.request
 import pytest
 
 from akashic_codex import __version__
+from akashic_codex.adapters import claude_transcript_to_log
 from akashic_codex.db import (
     SCHEMA_PATH,
+    delete_vector,
     get_conversation,
     get_meta,
     get_tags,
@@ -21,9 +24,10 @@ from akashic_codex.db import (
     search_fts,
     search_vectors,
     set_meta,
+    upsert_conversation,
 )
 from akashic_codex.embeddings import MODEL_NAME, embed
-from akashic_codex.ingest import ensure_embedder_identity, save_conversation
+from akashic_codex.ingest import ensure_embedder_identity, save_conversation, save_session
 from akashic_codex.search import assert_active_embedder, fuse, search
 from akashic_codex.summarizers import (
     SUMMARIZER,
@@ -251,3 +255,114 @@ def test_save_conversation_records_summarizer_provenance(db_conn):
         "SELECT summarizer FROM conversations WHERE id = ?", (conv_id,)
     ).fetchone()
     assert row["summarizer"] == SUMMARIZER
+
+
+def test_upsert_conversation_updates_same_session_in_place(db_conn):
+    first = upsert_conversation(db_conn, "session-1", "First title", "log turn 1")
+    second = upsert_conversation(db_conn, "session-1", "Second title", "log turn 1 and 2")
+    # same session must reuse the one row, not duplicate it
+    assert first == second
+    rows = db_conn.execute("SELECT id, title, full_log FROM conversations").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["title"] == "Second title"
+    assert rows[0]["full_log"] == "log turn 1 and 2"
+
+
+def test_upsert_conversation_distinct_sessions_are_separate_rows(db_conn):
+    one = upsert_conversation(db_conn, "session-1", "A", "a")
+    two = upsert_conversation(db_conn, "session-2", "B", "b")
+    assert one != two
+    count = db_conn.execute("SELECT count(*) AS c FROM conversations").fetchone()["c"]
+    assert count == 2
+
+
+def test_upsert_conversation_refreshes_fts_on_update(db_conn):
+    upsert_conversation(db_conn, "session-1", "Postgres notes", "x", summary="chose postgres")
+    upsert_conversation(db_conn, "session-1", "SQLite notes", "x", summary="chose sqlite")
+    # the AFTER UPDATE trigger must drop the stale index entry and add the new one
+    assert len(search_fts(db_conn, "sqlite")) == 1
+    assert search_fts(db_conn, "postgres") == []
+
+
+def test_delete_vector_removes_row_and_allows_reinsert(db_conn):
+    cid = insert_conversation(db_conn, "T", "log")
+    insert_vector(db_conn, cid, [0.1] * 384)
+    delete_vector(db_conn, cid)
+    gone = db_conn.execute(
+        "SELECT count(*) AS c FROM summary_vectors WHERE conversation_id = ?", (cid,)
+    ).fetchone()["c"]
+    assert gone == 0
+    # a fresh vector must go in without colliding on the primary key
+    insert_vector(db_conn, cid, [0.2] * 384)
+    again = db_conn.execute(
+        "SELECT count(*) AS c FROM summary_vectors WHERE conversation_id = ?", (cid,)
+    ).fetchone()["c"]
+    assert again == 1
+
+
+def test_delete_vector_missing_id_is_noop(db_conn):
+    # deleting a conversation that never had a vector must not raise
+    delete_vector(db_conn, 999)
+
+
+def test_save_session_updates_in_place_across_turns(db_conn, mock_embed):
+    first = save_session(db_conn, "session-A", "turn one text", title="Chat", source="claude")
+    second = save_session(db_conn, "session-A", "turn one text plus turn two", title="Chat")
+    assert first == second
+    conv_count = db_conn.execute("SELECT count(*) AS c FROM conversations").fetchone()["c"]
+    vec_count = db_conn.execute("SELECT count(*) AS c FROM summary_vectors").fetchone()["c"]
+    # one row and exactly one vector: the update replaced, it did not duplicate
+    assert conv_count == 1
+    assert vec_count == 1
+    assert get_conversation(db_conn, first)["full_log"] == "turn one text plus turn two"
+
+
+def test_save_session_search_reflects_latest_turn(db_conn, mock_embed):
+    convo_id = save_session(db_conn, "session-A", "we discussed postgres", title="Backend")
+    save_session(db_conn, "session-A", "we discussed postgres then chose sqlite", title="Backend")
+    results = search(db_conn, "sqlite")
+    assert results
+    assert results[0]["id"] == convo_id
+
+
+def test_claude_transcript_to_log_flattens_and_filters(tmp_path):
+    entries = [
+        {"type": "queue-operation", "operation": "noise"},  # noise: dropped
+        {
+            "type": "user",
+            "message": {"role": "user", "content": [{"type": "text", "text": "How do I upsert?"}]},
+        },
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "internal"},  # non-text block: ignored
+                    {"type": "text", "text": "Use ON CONFLICT."},
+                ],
+            },
+        },
+        {"type": "file-history-snapshot", "messageId": "x"},  # noise: dropped
+        # an assistant turn that is thinking-only -> empty text -> whole turn skipped
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "thinking", "thinking": "only"}],
+            },
+        },
+        # content as a plain string rather than a list of blocks
+        {"type": "user", "message": {"role": "user", "content": "Thanks!"}},
+    ]
+    path = tmp_path / "transcript.jsonl"
+    path.write_text("\n".join(json.dumps(e) for e in entries), encoding="utf-8")
+
+    log = claude_transcript_to_log(str(path))
+
+    assert log == "User: How do I upsert?\nAssistant: Use ON CONFLICT.\nUser: Thanks!"
+
+
+def test_claude_transcript_to_log_empty_transcript_returns_empty(tmp_path):
+    path = tmp_path / "empty.jsonl"
+    path.write_text("", encoding="utf-8")
+    assert claude_transcript_to_log(str(path)) == ""

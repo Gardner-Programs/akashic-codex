@@ -91,9 +91,46 @@ Claude Desktop (`claude_desktop_config.json`):
 
 Use absolute paths so the client can find the project's virtualenv.
 
+### Auto-save (Claude Code hook)
+
+Save every Claude Code session automatically, with no manual `save` step. A
+`Stop` hook runs after each turn and upserts the conversation by its session id,
+so a session that grows over many turns stays a single row that updates in place
+instead of duplicating. Saved conversations get `source` set to `claude-code`.
+
+Add this to your Claude Code settings (`~/.claude/settings.json` for every
+project, or `.claude/settings.json` for one):
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/akashic-codex/.venv/bin/python -m akashic_codex.cli claude-hook"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Notes:
+
+- Use an absolute path to the project's virtualenv python, same as the MCP setup above.
+- Set `AKASHIC_DB_PATH` to a permanent location (not the repo's `data/`) and run
+  `python -m akashic_codex.cli init` against it once before enabling the hook, so
+  the schema exists and your history lives outside the checkout.
+- The hook starts a fresh process each turn and loads the embedding model on every
+  run, so expect a brief pause per turn. That is fine for local single-user use;
+  making it cheaper (a resident process, or summarizing less often) is future work.
+
 ## Status
 
-Active development. Roadmap steps 1-8 are built and tested.
+Active development. Roadmap steps 1-9 are built and tested.
 
 - [x] Core storage (SQLite schema, save / read)
 - [x] Keyword search (FTS5)
@@ -103,6 +140,7 @@ Active development. Roadmap steps 1-8 are built and tested.
 - [x] CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp`)
 - [x] REST API (FastAPI: save / search / show)
 - [x] MCP server (expose `search_memory` / `get_conversation` as tools)
+- [x] Auto-save (Claude Code `Stop` hook: upsert-by-session, platform adapter seam)
 - [ ] Polish (web view or TUI for demos)
 
 CI runs ruff and pytest on every change. See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture and full roadmap.
@@ -116,7 +154,8 @@ src/akashic_codex/
   embeddings.py            single fixed embedding model
   ingest.py                save pipeline: summarize, tag, embed, store
   search.py                two-tier hybrid retrieval
-  cli.py                   command-line entry point (init/save/search/show/serve_api/serve_mcp)
+  adapters.py              per-platform transcript adapters (Claude Code today; more via #21)
+  cli.py                   command-line entry point (init/save/search/show/serve_api/serve_mcp/claude-hook)
   api.py                   FastAPI REST layer
   mcp_server.py            MCP server layer (read-only tools over stdio)
 tests/                     pytest
