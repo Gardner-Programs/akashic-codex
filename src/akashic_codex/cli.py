@@ -7,14 +7,17 @@ Usage:
     python -m akashic_codex.cli show <id>
     python -m akashic_codex.cli serve_api [--host ... --port ... --reload]
     python -m akashic_codex.cli serve_mcp
+    python -m akashic_codex.cli claude-hook   (Claude Code Stop hook; reads stdin JSON)
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from akashic_codex import db
-from akashic_codex.ingest import save_conversation
+from akashic_codex.adapters import claude_transcript_to_log
+from akashic_codex.ingest import save_conversation, save_session
 from akashic_codex.search import search
 
 
@@ -46,6 +49,23 @@ def cmd_save(args):
     source = args.source
     conv_id = save_conversation(conn, full_log, title, source)
     print(f"Conversation saved ID: {conv_id}")
+
+
+def cmd_claude_hook(args):
+    """Auto-save entry point, invoked by a Claude Code Stop hook.
+
+    Claude Code hands us its payload as JSON on stdin. We pull out the session
+    id and the path to the session transcript, flatten that transcript (via the
+    Claude adapter) into a single log, and upsert it via save_session, so a
+    session that grows over many turns updates one row instead of duplicating.
+    """
+    raw = sys.stdin.read()
+    data = json.loads(raw)
+    session_id = data["session_id"]
+    transcript_path = data["transcript_path"]
+    full_log = claude_transcript_to_log(transcript_path)
+    conn = db.connect()
+    save_session(conn, session_id, full_log, source="claude-code")
 
 
 def cmd_show(args):
@@ -82,6 +102,11 @@ def main() -> None:
     p_save.add_argument("--title")
     p_save.add_argument("--source")
     p_save.set_defaults(func=cmd_save)
+
+    p_hook = sub.add_parser(
+        "claude-hook", help="auto-save from a Claude Code Stop hook (reads JSON on stdin)"
+    )
+    p_hook.set_defaults(func=cmd_claude_hook)
 
     p_search = sub.add_parser("search", help="search stored conversations")
     p_search.add_argument("query")

@@ -4,6 +4,7 @@ Run with:  pytest
 """
 
 import io
+import json
 import re
 import urllib.error
 import urllib.request
@@ -11,6 +12,7 @@ import urllib.request
 import pytest
 
 from akashic_codex import __version__
+from akashic_codex.adapters import claude_transcript_to_log
 from akashic_codex.db import (
     SCHEMA_PATH,
     delete_vector,
@@ -321,3 +323,46 @@ def test_save_session_search_reflects_latest_turn(db_conn, mock_embed):
     results = search(db_conn, "sqlite")
     assert results
     assert results[0]["id"] == convo_id
+
+
+def test_claude_transcript_to_log_flattens_and_filters(tmp_path):
+    entries = [
+        {"type": "queue-operation", "operation": "noise"},  # noise: dropped
+        {
+            "type": "user",
+            "message": {"role": "user", "content": [{"type": "text", "text": "How do I upsert?"}]},
+        },
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "internal"},  # non-text block: ignored
+                    {"type": "text", "text": "Use ON CONFLICT."},
+                ],
+            },
+        },
+        {"type": "file-history-snapshot", "messageId": "x"},  # noise: dropped
+        # an assistant turn that is thinking-only -> empty text -> whole turn skipped
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "thinking", "thinking": "only"}],
+            },
+        },
+        # content as a plain string rather than a list of blocks
+        {"type": "user", "message": {"role": "user", "content": "Thanks!"}},
+    ]
+    path = tmp_path / "transcript.jsonl"
+    path.write_text("\n".join(json.dumps(e) for e in entries), encoding="utf-8")
+
+    log = claude_transcript_to_log(str(path))
+
+    assert log == "User: How do I upsert?\nAssistant: Use ON CONFLICT.\nUser: Thanks!"
+
+
+def test_claude_transcript_to_log_empty_transcript_returns_empty(tmp_path):
+    path = tmp_path / "empty.jsonl"
+    path.write_text("", encoding="utf-8")
+    assert claude_transcript_to_log(str(path)) == ""
