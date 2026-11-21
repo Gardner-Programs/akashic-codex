@@ -72,6 +72,9 @@ hook behavior. Set it to `session_end` and register the hook for both `Stop` and
 summary, and vector, and SessionEnd runs the full derived-data pipeline. The first
 qualifying Stop still creates a searchable row. This reduces repeated generation
 and embedding work while keeping the transcript current throughout the session.
+Session-keyed writes update the existing conversation row first and insert only
+for a new session. This avoids consuming an AUTOINCREMENT id on each subsequent
+turn without changing the schema or requiring a migration.
 
 Database snapshots written by `reembed`, `retitle`, and `resummarize` are
 retained per operation label. `AKASHIC_BACKUP_RETENTION` sets the positive number
