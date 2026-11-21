@@ -49,7 +49,16 @@ python -m akashic_codex.cli init
 python -m akashic_codex.cli save examples/sqlite_decision.txt --title "Why we chose SQLite" --source claude
 python -m akashic_codex.cli search "what database did we pick for local storage"
 python -m akashic_codex.cli show 1
+python -m akashic_codex.cli import claude ~/Downloads/conversations.json
 ```
+
+Batch import provider JSON exports with `import claude`, `import gemini`, or
+`import chatgpt` followed by the export file path. Each non-empty conversation
+is saved through the normal ingest pipeline with its export title and provider
+as its source. The adapters support Claude account exports (`chat_messages`),
+Gemini conversation JSON (`conversations`/`messages`), and ChatGPT
+`conversations.json` mapping trees. Imported role turns populate the structured
+`messages` table while `full_log` remains the source transcript.
 
 ### Titles
 
@@ -248,7 +257,7 @@ src/akashic_codex/
   titlers.py               title backends (heuristic / Ollama) + retitle
   reembed.py               atomic rebuild of every vector on the active model
   resummarize.py           regenerate summaries and refresh their vectors
-  adapters.py              per-platform transcript adapters (Claude Code today; more via #21)
+  adapters.py              Claude, Gemini, and ChatGPT export adapters
   cli.py                   command-line entry point (init/save/search/show/reembed/retitle/resummarize/serve_api/serve_mcp/claude-hook)
   api.py                   FastAPI REST layer
   mcp_server.py            MCP server layer (read-only tools over stdio)
