@@ -7,6 +7,7 @@ keep this to a single simple step (paste, file drop, or batch export).
 
 import re
 import sqlite3
+import uuid
 from collections import Counter
 
 from akashic_codex import db
@@ -280,6 +281,33 @@ def save_session(
     int
         The id of the stored (inserted or updated) conversation.
     """
+    # A complete prior transcript embedded here is strong evidence of continuity.
+    # Short snippets are excluded because common greetings are not meaningful proof.
+    overlaps = db.find_transcript_overlaps(conn, session_id, full_log)
+    current = conn.execute(
+        "SELECT id, thread_id FROM conversations WHERE session_id = ?", (session_id,)
+    ).fetchone()
+    related_ids = [row["id"] for row in overlaps]
+    related_thread_ids = {row["thread_id"] for row in overlaps if row["thread_id"]}
+    if current and overlaps:
+        related_ids.append(current["id"])
+        if current["thread_id"]:
+            related_thread_ids.add(current["thread_id"])
+    if related_thread_ids:
+        placeholders = ",".join("?" for _ in related_thread_ids)
+        related_ids.extend(
+            row["id"]
+            for row in conn.execute(
+                f"SELECT id FROM conversations WHERE thread_id IN ({placeholders})",
+                tuple(related_thread_ids),
+            )
+        )
+    if related_ids:
+        thread_id = sorted(related_thread_ids)[0] if related_thread_ids else str(uuid.uuid4())
+        db.assign_thread(conn, list(set(related_ids)), thread_id)
+    elif current and current["thread_id"]:
+        thread_id = current["thread_id"]
+
     summary = summarize(full_log) if summary_override is None else summary_override
     if not title:
         title = make_title(summary)

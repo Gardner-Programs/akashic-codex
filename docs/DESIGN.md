@@ -81,6 +81,13 @@ Session-keyed writes update the existing conversation row first and insert only
 for a new session. This avoids consuming an AUTOINCREMENT id on each subsequent
 turn without changing the schema or requiring a migration.
 
+Session ingest links threads when the new full transcript contains an existing
+conversation's complete transcript verbatim. The match must be at least 200
+non-whitespace characters; short common exchanges are not reliable evidence.
+The database layer performs the SQLite substring lookup, while ingest assigns
+one thread ID to all matched rows and their existing thread members. Semantic
+similarity is not used to auto-link conversations.
+
 Database snapshots written by `reembed`, `retitle`, and `resummarize` are
 retained per operation label. `AKASHIC_BACKUP_RETENTION` sets the positive number
 to keep, defaulting to 5; each new snapshot prunes older snapshots only for its
