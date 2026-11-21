@@ -17,6 +17,7 @@ from akashic_codex.db import (
     SCHEMA_PATH,
     delete_vector,
     get_conversation,
+    get_messages,
     get_meta,
     get_tags,
     insert_conversation,
@@ -125,6 +126,31 @@ def test_save_conversations(db_conn):
     assert convo["source"] == "cli"
     assert convo["full_log"] == "convo testing full log"
     assert convo["summary"] is not None
+
+
+def test_ingest_derives_messages_and_preserves_full_log(db_conn, mock_embed):
+    full_log = "User: Hello\nAssistant [model=claude-sonnet]: Hi there.\n  Continued."
+    conv_id = save_conversation(db_conn, full_log, "Greeting", "claude-code")
+
+    rows = get_messages(db_conn, conv_id)
+    assert [tuple(row) for row in rows] == [
+        (0, "user", "Hello", None),
+        (1, "assistant", "Hi there.\n  Continued.", "claude-sonnet"),
+    ]
+    assert get_conversation(db_conn, conv_id)["full_log"] == full_log
+
+
+def test_session_update_replaces_derived_messages(db_conn, mock_embed):
+    first = "User: first\nAssistant: reply"
+    conv_id = save_session(db_conn, "session-1", first, title="Session")
+    updated = first + "\nUser: follow up\nAssistant [model=gemini-2]: done"
+    assert save_session(db_conn, "session-1", updated, title="Session") == conv_id
+
+    rows = get_messages(db_conn, conv_id)
+    assert len(rows) == 4
+    assert rows[-1]["role"] == "assistant"
+    assert rows[-1]["model"] == "gemini-2"
+    assert get_conversation(db_conn, conv_id)["full_log"] == updated
 
 
 def test_save_conversations_searching(db_conn):
@@ -471,6 +497,17 @@ def test_claude_transcript_to_log_flattens_and_filters(tmp_path):
     log = claude_transcript_to_log(str(path))
 
     assert log == "User: How do I upsert?\nAssistant: Use ON CONFLICT.\nUser: Thanks!"
+
+
+def test_claude_transcript_to_log_preserves_assistant_model(tmp_path):
+    entry = {
+        "type": "assistant",
+        "message": {"role": "assistant", "model": "claude-sonnet-4", "content": "Hello."},
+    }
+    path = tmp_path / "transcript.jsonl"
+    path.write_text(json.dumps(entry), encoding="utf-8")
+
+    assert claude_transcript_to_log(str(path)) == "Assistant [model=claude-sonnet-4]: Hello."
 
 
 def test_claude_transcript_to_log_empty_transcript_returns_empty(tmp_path):

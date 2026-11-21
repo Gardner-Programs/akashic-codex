@@ -12,6 +12,7 @@ from collections import Counter
 
 from akashic_codex import db
 from akashic_codex.embeddings import MODEL_NAME, embed
+from akashic_codex.messages import parse_messages
 from akashic_codex.summarizers import SUMMARIZER, summarize
 from akashic_codex.titlers import make_title
 
@@ -233,6 +234,7 @@ def save_conversation(
     conv_id = db.insert_conversation(
         conn, title, full_log, summarizer=SUMMARIZER, summary=summary, source=source
     )
+    db.replace_messages(conn, conv_id, parse_messages(full_log))
     for tag in tags:
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)
@@ -324,6 +326,7 @@ def save_session(
         source=source,
         thread_id=thread_id,
     )
+    db.replace_messages(conn, conv_id, parse_messages(full_log))
     for tag in tags:
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)

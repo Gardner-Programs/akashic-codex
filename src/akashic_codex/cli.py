@@ -22,6 +22,7 @@ from pathlib import Path
 from akashic_codex import db
 from akashic_codex.adapters import claude_transcript_to_log
 from akashic_codex.ingest import save_conversation, save_session
+from akashic_codex.messages import parse_messages
 from akashic_codex.search import search
 
 
@@ -82,8 +83,9 @@ def cmd_claude_hook(args):
     if (
         policy == "session_end"
         and event != "SessionEnd"
-        and db.update_session_log(conn, session_id, full_log) is not None
+        and (conversation_id := db.update_session_log(conn, session_id, full_log)) is not None
     ):
+        db.replace_messages(conn, conversation_id, parse_messages(full_log))
         return
     from akashic_codex.summarizers import SUMMARIZER, _extractive, summarize
 
