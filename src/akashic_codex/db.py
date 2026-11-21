@@ -393,6 +393,82 @@ def delete_vector(conn: sqlite3.Connection, conv_id: int) -> None:
         )
 
 
+def list_summaries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Return every conversation's id and summary, oldest first.
+
+    The input to a full re-embed: summaries are what get embedded. A missing
+    summary comes back as None; the caller decides how to embed it.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+
+    Returns
+    -------
+    list[sqlite3.Row]
+        Rows of (id, summary) ordered by id.
+    """
+    return conn.execute("SELECT id, summary FROM conversations ORDER BY id").fetchall()
+
+
+def replace_all_vectors(
+    conn: sqlite3.Connection,
+    vectors: dict[int, list[float]],
+    dim: int,
+    meta: dict[str, str] | None = None,
+) -> None:
+    """Atomically swap the whole vector table for a freshly built one.
+
+    Drops summary_vectors, recreates it at ``dim``, inserts every vector, and
+    writes any ``meta`` keys, all in one transaction. Either the store ends up
+    entirely on the new vectors and identity, or nothing changes; two models'
+    vectors are never mixed. Recreating the table (rather than updating rows) is
+    what lets the dimension change.
+
+    The caller must already hold the write lock (``BEGIN IMMEDIATE``) and owns
+    the commit or rollback, so it can do a final consistency check inside the
+    same transaction. See reembed.reembed_store.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection inside an open transaction.
+    vectors : dict[int, list[float]]
+        Conversation id to embedding; every vector must have length ``dim``.
+    dim : int
+        Dimension for the recreated vector column.
+    meta : dict[str, str] or None, optional
+        store_meta keys to upsert in the same transaction.
+
+    Raises
+    ------
+    ValueError
+        If any vector's length differs from ``dim``.
+    """
+    dim = int(dim)
+    bad = [cid for cid, vec in vectors.items() if len(vec) != dim]
+    if bad:
+        raise ValueError(f"Vectors for ids {bad[:5]} do not have dimension {dim}")
+    conn.execute("DROP TABLE IF EXISTS summary_vectors")
+    conn.execute(
+        f"""CREATE VIRTUAL TABLE summary_vectors USING vec0(
+            conversation_id INTEGER PRIMARY KEY,
+            embedding FLOAT[{dim}]
+        )"""
+    )
+    conn.executemany(
+        "INSERT INTO summary_vectors (conversation_id, embedding) VALUES (?, ?)",
+        [(cid, sqlite_vec.serialize_float32(vec)) for cid, vec in vectors.items()],
+    )
+    for key, value in (meta or {}).items():
+        conn.execute(
+            """INSERT INTO store_meta (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (key, value),
+        )
+
+
 def search_vectors(
     conn: sqlite3.Connection, query_vector: list[float], limit: int = 5
 ) -> list[sqlite3.Row]:

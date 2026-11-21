@@ -8,6 +8,7 @@ Usage:
     python -m akashic_codex.cli serve_api [--host ... --port ... --reload]
     python -m akashic_codex.cli serve_mcp
     python -m akashic_codex.cli claude-hook   (Claude Code Stop hook; reads stdin JSON)
+    python -m akashic_codex.cli reembed [--yes]
 """
 
 import argparse
@@ -68,6 +69,26 @@ def cmd_claude_hook(args):
     save_session(conn, session_id, full_log, source="claude-code")
 
 
+def cmd_reembed(args):
+    """Rebuild every vector with the active embedding model, after confirming."""
+    from akashic_codex.reembed import plan_reembed, reembed_store
+
+    conn = db.connect()
+    plan = plan_reembed(conn)
+    old = plan["old_model"] or "unstamped"
+    if plan["old_dim"]:
+        old += f" ({plan['old_dim']} dims)"
+    print(f"Re-embed {plan['count']} conversations: {old} -> {plan['new_model']}")
+    print(f"Estimated cost: ${plan['cost']:.2f} (local model)")
+    if not args.yes and input("Proceed? [y/N] ").strip().lower() != "y":
+        print("Aborted")
+        return
+    result = reembed_store(conn)
+    print(
+        f"Re-embedded {result['count']} conversations with {result['model']} ({result['dim']} dims)"
+    )
+
+
 def cmd_show(args):
     """Print a full conversation by id, or exit nonzero if it does not exist."""
     conn = db.connect()
@@ -107,6 +128,12 @@ def main() -> None:
         "claude-hook", help="auto-save from a Claude Code Stop hook (reads JSON on stdin)"
     )
     p_hook.set_defaults(func=cmd_claude_hook)
+
+    p_reembed = sub.add_parser(
+        "reembed", help="rebuild all vectors with the active embedding model"
+    )
+    p_reembed.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p_reembed.set_defaults(func=cmd_reembed)
 
     p_search = sub.add_parser("search", help="search stored conversations")
     p_search.add_argument("query")
