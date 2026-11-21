@@ -431,6 +431,43 @@ def backup(conn: sqlite3.Connection, label: str = "backup") -> Path:
     return dest
 
 
+def list_for_retitle(conn: sqlite3.Connection, only_untitled: bool = True) -> list[sqlite3.Row]:
+    """Return (id, title, summary) rows to retitle, oldest first.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    only_untitled : bool, optional
+        Only rows titled "Untitled" or empty (default True); False returns all.
+
+    Returns
+    -------
+    list[sqlite3.Row]
+        Rows of (id, title, summary).
+    """
+    where = "WHERE title IN ('Untitled', '')" if only_untitled else ""
+    return conn.execute(
+        f"SELECT id, title, summary FROM conversations {where} ORDER BY id"
+    ).fetchall()
+
+
+def set_title(conn: sqlite3.Connection, conv_id: int, title: str) -> None:
+    """Change one conversation's title; the update trigger refreshes FTS.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open database connection.
+    conv_id : int
+        Id of the conversation.
+    title : str
+        The new title.
+    """
+    with conn:
+        conn.execute("UPDATE conversations SET title = ? WHERE id = ?", (title, conv_id))
+
+
 def list_summaries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Return every conversation's id and summary, oldest first.
 

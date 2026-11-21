@@ -9,6 +9,7 @@ Usage:
     python -m akashic_codex.cli serve_mcp
     python -m akashic_codex.cli claude-hook   (Claude Code Stop hook; reads stdin JSON)
     python -m akashic_codex.cli reembed [--yes]
+    python -m akashic_codex.cli retitle [--all] [--yes]
 """
 
 import argparse
@@ -90,6 +91,21 @@ def cmd_reembed(args):
     )
 
 
+def cmd_retitle(args):
+    """Regenerate titles with the active titler, after confirming."""
+    from akashic_codex.titlers import TITLER, retitle_store
+
+    conn = db.connect()
+    scope = "every conversation" if args.all else "untitled conversations"
+    print(f"Retitle {scope} with {TITLER}. A backup of the database is written first.")
+    if not args.yes and input("Proceed? [y/N] ").strip().lower() != "y":
+        print("Aborted")
+        return
+    result = retitle_store(conn, all_rows=args.all)
+    print(f"Backup written to {result['backup']}")
+    print(f"Retitled {result['count']} of {result['scanned']} conversations")
+
+
 def cmd_show(args):
     """Print a full conversation by id, or exit nonzero if it does not exist."""
     conn = db.connect()
@@ -135,6 +151,11 @@ def main() -> None:
     )
     p_reembed.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     p_reembed.set_defaults(func=cmd_reembed)
+
+    p_retitle = sub.add_parser("retitle", help="regenerate titles with the active titler")
+    p_retitle.add_argument("--all", action="store_true", help="retitle every conversation")
+    p_retitle.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p_retitle.set_defaults(func=cmd_retitle)
 
     p_search = sub.add_parser("search", help="search stored conversations")
     p_search.add_argument("query")

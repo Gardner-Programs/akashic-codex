@@ -10,6 +10,7 @@ import sqlite3
 from akashic_codex import db
 from akashic_codex.embeddings import MODEL_NAME, embed
 from akashic_codex.summarizers import SUMMARIZER, summarize
+from akashic_codex.titlers import make_title
 
 
 def suggest_tags(full_log: str) -> list[str]:
@@ -86,7 +87,8 @@ def save_conversation(
     full_log : str
         The complete conversation transcript.
     title : str or None, optional
-        Title for the conversation; a default is used if not given.
+        Title for the conversation; generated from the summary by the active
+        titler (AKASHIC_TITLER) if not given.
     source : str or None, optional
         Which model or app the conversation came from.
 
@@ -95,9 +97,9 @@ def save_conversation(
     int
         The id of the stored conversation.
     """
-    if not title:
-        title = "Untitled"
     summary = summarize(full_log)
+    if not title:
+        title = make_title(summary)
     tags = suggest_tags(full_log)
     vector = embed(summary)
     ensure_embedder_identity(conn, vector)
@@ -131,7 +133,8 @@ def save_session(conn, session_id, full_log, title=None, source=None, thread_id=
     full_log : str
         The complete conversation transcript as it stands this turn.
     title : str or None, optional
-        Title for the conversation; a default is used if not given.
+        Title for the conversation; generated from the summary by the active
+        titler (AKASHIC_TITLER) if not given.
     source : str or None, optional
         Which model or app the conversation came from.
     thread_id : str or None, optional
@@ -142,9 +145,9 @@ def save_session(conn, session_id, full_log, title=None, source=None, thread_id=
     int
         The id of the stored (inserted or updated) conversation.
     """
-    if not title:
-        title = "Untitled"
     summary = summarize(full_log)
+    if not title:
+        title = make_title(summary)
     tags = suggest_tags(full_log)
     vector = embed(summary)
     ensure_embedder_identity(conn, vector)

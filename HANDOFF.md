@@ -32,7 +32,9 @@ Shipped since the numbered roadmap:
 
 **Re-embed command (#18):** `reembed.py` + `cli reembed [--yes]`. Embeds every summary with the active model outside any transaction (so the live hook is not blocked), then under `BEGIN IMMEDIATE` embeds anything that changed mid-run and calls `db.replace_all_vectors`, which drops and recreates `summary_vectors` at the new dimension and upserts the identity in `store_meta`, all in one transaction. `ensure_embedder_identity` now also refuses a model mismatch on write, and runs before the row is inserted so a refused save writes nothing.
 
-66 tests, ruff clean. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
+**Titles + retitle:** `titlers.py` (`AKASHIC_TITLER`: `heuristic` default, `ollama:<model>` with heuristic fallback on failure). `save_conversation`/`save_session` title from the summary when none is given; `cli retitle [--all] [--yes]` backs up then regenerates. The live hook runs with `AKASHIC_TITLER=ollama:gemma4:12b`.
+
+80 tests, ruff clean. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
 
 ## Files
 
@@ -42,7 +44,7 @@ Shipped since the numbered roadmap:
 
 - Setup: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`, then `cp .env.example .env`.
 - Tests: `pytest -q`. Lint: `ruff check src tests` and `ruff format --check src tests`.
-- CLI: `python -m akashic_codex.cli {init | save <file> --title "..." | search <query> | show <id> | reembed [--yes] | serve_api | serve_mcp | claude-hook}`. (`claude-hook` reads a Claude Code Stop-hook payload on stdin; not run by hand.)
+- CLI: `python -m akashic_codex.cli {init | save <file> --title "..." | search <query> | show <id> | reembed [--yes] | retitle [--all] [--yes] | serve_api | serve_mcp | claude-hook}`. (`claude-hook` reads a Claude Code Stop-hook payload on stdin; not run by hand.)
 - Config (env vars, see `.env.example`): `AKASHIC_DB_PATH`, `AKASHIC_EMBEDDING_MODEL` (fixed per store), `AKASHIC_SUMMARIZER` (`extractive` | `ollama:<model>`), `AKASHIC_OLLAMA_HOST`.
 
 ## Testing approach
