@@ -75,6 +75,10 @@ model identity updated in a single transaction, so a failure leaves the store as
 it was. Running it with the same model just rebuilds the index. Remember to give
 the auto-save hook the same `AKASHIC_EMBEDDING_MODEL`.
 
+Re-embed, retitle, and resummarize keep the newest five snapshots per operation
+by default. Set `AKASHIC_BACKUP_RETENTION` to a positive integer to change this;
+older snapshots with that operation's label are removed after each new backup.
+
 ### Schema updates
 
 Running `init` on an existing database applies any supported schema migrations
