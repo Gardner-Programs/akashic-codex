@@ -176,6 +176,10 @@ Notes:
   extractive summary and records `extractive` as the summarizer. Manual saves still
   report summarizer failures. The `resummarize` command can regenerate those rows
   later with the configured backend.
+- The hook skips transcripts shorter than `AKASHIC_MIN_SESSION_CHARS` (default
+  `200`) to avoid saving test sessions and one-word exchanges. Because each hook
+  run sees the full transcript, a skipped session is saved on a later turn once it
+  reaches the threshold. Set the value to `0` to disable the filter.
 
 ## Status
 

@@ -52,6 +52,12 @@ each corresponding vector with the active embedder. The Claude Code hook uses th
 offline extractive summarizer if its configured backend fails, preserving the raw
 transcript and recording the fallback provenance. Manual saves remain fail-loud.
 
+The Claude Code auto-save hook also skips transcripts shorter than
+`AKASHIC_MIN_SESSION_CHARS` (default `200`). The check runs against the flattened
+transcript before summarization or database access; skipped sessions can be saved
+on a later turn once the cumulative transcript reaches the threshold. Set the
+value to `0` to save every session.
+
 ## Two AI backends, two different rules
 
 The system uses AI in two places, and they have opposite swap rules. Do not conflate them.

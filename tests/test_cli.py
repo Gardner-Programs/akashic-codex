@@ -134,6 +134,7 @@ def test_claude_hook_falls_back_when_summarizer_fails(cli_db, monkeypatch, tmp_p
     import json
 
     run(monkeypatch, "init")
+    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "0")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
         '{"type":"user","message":{"content":"Remember my SQLite choice."}}\n',
@@ -165,3 +166,61 @@ def test_claude_hook_falls_back_when_summarizer_fails(cli_db, monkeypatch, tmp_p
     assert row["full_log"] == "Remember my SQLite choice."
     assert row["summary"]
     assert row["summarizer"] == "extractive"
+
+
+def test_claude_hook_skips_sessions_below_minimum_length(cli_db, monkeypatch, tmp_path, capsys):
+    import json
+
+    run(monkeypatch, "init")
+    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "40")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "User: pong")
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        type(
+            "Input",
+            (),
+            {
+                "read": lambda self: json.dumps(
+                    {"session_id": "s1", "transcript_path": str(transcript)}
+                )
+            },
+        )(),
+    )
+
+    run(monkeypatch, "claude-hook")
+
+    conn = db.connect()
+    assert conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 0
+    assert "Session below minimum length; skipped" in capsys.readouterr().out
+
+
+def test_claude_hook_saves_sessions_at_minimum_length(cli_db, monkeypatch, tmp_path):
+    import json
+
+    run(monkeypatch, "init")
+    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "10")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "User: useful conversation")
+    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Useful conversation")
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        type(
+            "Input",
+            (),
+            {
+                "read": lambda self: json.dumps(
+                    {"session_id": "s1", "transcript_path": str(transcript)}
+                )
+            },
+        )(),
+    )
+
+    run(monkeypatch, "claude-hook")
+
+    conn = db.connect()
+    assert conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 1
