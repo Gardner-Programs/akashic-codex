@@ -56,6 +56,10 @@ The system uses AI in two places, and they have opposite swap rules. Do not conf
 
 Local-first, single file the user owns, zero server to run or secure, single-user so the one-writer limit never bites. The only tradeoff is that vector search comes from the `sqlite-vec` add-on rather than being built in. All SQLite code is isolated in `db.py`, so a future move to Postgres + pgvector is a contained change, not a rewrite.
 
+## Schema Versioning & Migrations
+
+To safely evolve the database schema over time without data loss or breaking existing stores, AkashicCodex records a `schema_version` in `store_meta`. `init_db()` runs forward-only migration steps defined in `src/akashic_codex/migrations.py` that are newer than the store's recorded version, bumping the version in the same transaction as each step. A fresh database gets the current schema directly; an unversioned older store is identified from its existing columns and upgraded from that version. Invalid or newer-than-supported versions fail clearly rather than being overwritten. Migration 1 adds summarizer provenance and migration 2 adds session and thread identifiers.
+
 ## Build roadmap
 
 1. **Core storage.** Implement `db.connect` / `db.init_db`. Save and read a conversation. Prove the round trip with a test.

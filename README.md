@@ -65,6 +65,15 @@ model identity updated in a single transaction, so a failure leaves the store as
 it was. Running it with the same model just rebuilds the index. Remember to give
 the auto-save hook the same `AKASHIC_EMBEDDING_MODEL`.
 
+### Schema updates
+
+Running `init` on an existing database applies any supported schema migrations
+and records the schema version in `store_meta`. Migrations run forward in order,
+and each version update commits with its migration. Existing unversioned stores
+are upgraded from their current conversation columns, preserving stored rows.
+If the database has an invalid version or a version newer than this release
+supports, `init` stops with an error instead of changing its recorded version.
+
 The `examples/` folder has a few sample conversations to try. `docs/demo.sh` is the
 scripted version of the flow above, used to record the demo GIF.
 
