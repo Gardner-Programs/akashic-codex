@@ -123,6 +123,11 @@ scripted version of the flow above, used to record the demo GIF.
 python -m akashic_codex.cli serve_api --reload     # serves on http://127.0.0.1:8000
 ```
 
+Open [http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui) for a small browser
+over the store. It lists recent conversations, runs the same hybrid search as
+the CLI, and opens a selected conversation's full transcript. The JSON API
+routes remain available directly, with interactive API docs at `/docs`.
+
 Open the interactive docs at `http://127.0.0.1:8000/docs`, or call the endpoints directly:
 
 ```bash
@@ -239,7 +244,7 @@ Active development. Roadmap steps 1-9 are built and tested.
 - [x] MCP server (expose `search_memory` / `get_conversation` as tools)
 - [x] Auto-save (Claude Code `Stop` hook: upsert-by-session, platform adapter seam)
 - [x] Re-embed command (atomic model switch, guarded on both read and write)
-- [ ] Polish (web view or TUI for demos)
+- [x] Polish (web view for browsing and search; refreshed README demo)
 
 CI runs ruff and pytest on every change and weekly against the newest allowed
 dependency versions. See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture

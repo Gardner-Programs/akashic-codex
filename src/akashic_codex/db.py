@@ -334,6 +334,17 @@ def get_conversation(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | No
     return row
 
 
+def list_conversations(conn: sqlite3.Connection, limit: int = 20) -> list[sqlite3.Row]:
+    """List recent conversations with lightweight fields for browsing."""
+    return conn.execute(
+        """SELECT id, title, summary, source, created_at
+            FROM conversations
+            ORDER BY id DESC
+            LIMIT ?""",
+        (limit,),
+    ).fetchall()
+
+
 def get_summary_row(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | None:
     """Load one conversation's lightweight fields by id (id, title, summary).
 

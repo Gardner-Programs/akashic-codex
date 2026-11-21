@@ -43,10 +43,11 @@ DUMMY_CONVERSATIONS = [
 
 
 @pytest.fixture
-def client(tmp_path, mock_embed):
+def client(tmp_path, monkeypatch, mock_embed):
     """A TestClient wired to a fresh temp database via a dependency override."""
     db_path = str(tmp_path / "api.db")
     db.init_db(db_path)  # create the schema in the throwaway db
+    monkeypatch.setattr("akashic_codex.ingest.summarize", lambda full_log: full_log[:100])
 
     def override_get_conn():
         # Same shape as the real get_conn, but pinned to the temp db.
@@ -88,6 +89,28 @@ def test_search_returns_matching_conversation(client):
     assert r.status_code == 200
     assert len(r.json()) <= 3
     assert any("aglio e olio" in row["title"] for row in r.json())
+
+
+def test_recent_conversations_returns_limited_lightweight_rows(client):
+    for c in DUMMY_CONVERSATIONS:
+        client.post("/conversations", json=c)
+
+    r = client.get("/conversations", params={"limit": 2})
+    assert r.status_code == 200
+    assert len(r.json()) == 2
+    assert [row["id"] for row in r.json()] == [5, 4]
+    assert r.json()[0]["title"] == "Commit structure for features"
+    assert r.json()[0]["source"] == "claude"
+    assert r.json()[0]["summary"]
+    assert set(r.json()[0]) == {"id", "title", "summary", "source", "created_at"}
+    assert "full_log" not in r.json()[0]
+
+
+def test_store_ui_is_served(client):
+    r = client.get("/ui")
+    assert r.status_code == 200
+    assert "Browse all" in r.text
+    assert "Search conversations" in r.text
 
 
 def test_get_missing_conversation_returns_404(client):

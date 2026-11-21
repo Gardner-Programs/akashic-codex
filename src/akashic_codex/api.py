@@ -12,8 +12,10 @@ Run with:  uvicorn akashic_codex.api:app --reload
 import sqlite3
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from akashic_codex import db
@@ -29,6 +31,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AkashicCodex", description="Local AI memory store", lifespan=lifespan)
+
+
+@app.get("/ui", response_class=HTMLResponse, include_in_schema=False)
+def store_ui():
+    """Serve a small browser for recent conversations and hybrid search."""
+    html = Path(__file__).with_name("store.html").read_text(encoding="utf-8")
+    return HTMLResponse(html)
 
 
 def get_conn() -> Iterator[sqlite3.Connection]:
@@ -62,6 +71,14 @@ class SearchResult(BaseModel):
     summary: str
 
 
+class ConversationPreview(BaseModel):
+    id: int
+    title: str
+    summary: str | None = None
+    source: str | None = None
+    created_at: str
+
+
 class Conversation(BaseModel):
     id: int
     title: str
@@ -89,6 +106,14 @@ def search_conversation_endpoint(
     """Hybrid search over stored conversations; return ranked lightweight rows."""
     rows = search(conn, query, limit)
     return rows
+
+
+@app.get("/conversations", response_model=list[ConversationPreview])
+def list_conversations_endpoint(
+    limit: int = Query(default=20, ge=1, le=100), conn: sqlite3.Connection = Depends(get_conn)
+):
+    """List recent lightweight conversation rows for browsing."""
+    return [ConversationPreview(**dict(row)) for row in db.list_conversations(conn, limit)]
 
 
 @app.get("/conversations/{conv_id}", response_model=Conversation)

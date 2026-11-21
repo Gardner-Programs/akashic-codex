@@ -38,11 +38,11 @@ Shipped since the numbered roadmap:
 
 **Auto-save summary policy (#34):** `AKASHIC_SUMMARY_POLICY` defaults to `each_turn`. `session_end` updates only the raw transcript on later Stop events, preserving its summary, title, and vector; SessionEnd refreshes derived data. The first qualifying Stop creates the searchable row.
 
-80 tests, ruff clean. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
+The REST app includes a small `/ui` browser for recent memories, hybrid search, and opening full transcripts. The README terminal demo GIF has been refreshed to show titles. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
 
 ## Files
 
-`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,reembed,resummarize,summarizers,adapters,cli,api,mcp_server}.py`, `tests/{test_smoke,test_cli,test_api,test_mcp,test_reembed,test_resummarize,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
+`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,reembed,resummarize,summarizers,adapters,cli,api,mcp_server}.py`, `src/akashic_codex/store.html` (REST-backed browser UI), `tests/{test_smoke,test_cli,test_api,test_mcp,test_reembed,test_resummarize,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
 
 ## Commands
 

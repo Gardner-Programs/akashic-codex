@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AkashicCodex</title>
+    <style>
+      :root { color-scheme: light dark; font: 16px system-ui, sans-serif; }
+      body { max-width: 900px; margin: 3rem auto; padding: 0 1rem; }
+      h1 { margin-bottom: .2rem; }
+      p { color: color-mix(in srgb, currentColor 65%, transparent); }
+      form { display: flex; gap: .5rem; margin: 2rem 0; }
+      input { flex: 1; padding: .7rem; font: inherit; }
+      button { padding: .6rem .9rem; font: inherit; cursor: pointer; }
+      article { border-top: 1px solid #8886; padding: 1rem 0; }
+      article button { border: 0; background: none; padding: 0; text-align: left; color: inherit; }
+      article h2 { font-size: 1.15rem; margin: 0; }
+      .meta { font-size: .85rem; margin: .3rem 0; }
+      .summary { margin: .4rem 0; }
+      pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; background: #8882;
+        border-radius: .5rem; }
+      #status { min-height: 1.5em; }
+    </style>
+  </head>
+  <body>
+    <h1>AkashicCodex</h1>
+    <p>Browse recent memories or search by meaning and keywords.</p>
+    <form id="search">
+      <input id="query" type="search" placeholder="Search conversations"
+        aria-label="Search conversations">
+      <button>Search</button>
+      <button type="button" id="clear">Browse all</button>
+    </form>
+    <p id="status" aria-live="polite"></p>
+    <section id="results"></section>
+    <script>
+      const results = document.querySelector('#results');
+      const status = document.querySelector('#status');
+      const query = document.querySelector('#query');
+
+      function node(tag, text, className) {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        if (className) element.className = className;
+        return element;
+      }
+
+      async function load(url) {
+        status.textContent = 'Loading…';
+        results.replaceChildren();
+        try {
+          const response = await fetch(url);
+          if (!response.ok) throw Error('Request failed');
+          const rows = await response.json();
+          status.textContent = rows.length
+            ? `${rows.length} conversation${rows.length === 1 ? '' : 's'}`
+            : 'No conversations found';
+          for (const row of rows) {
+            const article = document.createElement('article');
+            const open = document.createElement('button');
+            open.append(node('h2', row.title || `Conversation ${row.id}`));
+            open.addEventListener('click', () => show(row.id));
+            article.append(
+              open,
+              node('div', `#${row.id} · ${row.source || 'unknown source'} · ${row.created_at}`, 'meta'),
+              node('p', row.summary || 'No summary', 'summary'),
+            );
+            results.append(article);
+          }
+        } catch (_error) {
+          status.textContent = 'Could not load conversations.';
+        }
+      }
+
+      async function show(id) {
+        status.textContent = 'Loading conversation…';
+        try {
+          const response = await fetch(`/conversations/${id}`);
+          if (!response.ok) throw Error('Request failed');
+          const row = await response.json();
+          const article = document.createElement('article');
+          article.append(
+            node('h2', row.title || `Conversation ${row.id}`),
+            node('div', `#${row.id} · ${row.source || 'unknown source'} · ${row.created_at}`, 'meta'),
+            node('p', row.summary || 'No summary', 'summary'),
+            node('pre', row.full_log),
+          );
+          results.replaceChildren(article);
+          status.textContent = 'Conversation details';
+        } catch (_error) {
+          status.textContent = 'Could not load conversation.';
+        }
+      }
+
+      document.querySelector('#search').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const value = query.value.trim();
+        load(value ? `/search?query=${encodeURIComponent(value)}&limit=20` : '/conversations');
+      });
+      document.querySelector('#clear').addEventListener('click', () => {
+        query.value = '';
+        load('/conversations');
+      });
+      load('/conversations');
+    </script>
+  </body>
+</html>
