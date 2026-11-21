@@ -58,9 +58,10 @@ def plan_reembed(conn: sqlite3.Connection) -> dict:
 def reembed_store(conn: sqlite3.Connection) -> dict:
     """Rebuild every summary vector with the active embedding model.
 
-    Embeds all summaries, then atomically replaces the vector table (recreated
-    at the new dimension) and stamps the new embedder identity in store_meta.
-    If anything fails, the store keeps its old vectors and identity.
+    Backs up the database first, then embeds all summaries, then atomically
+    replaces the vector table (recreated at the new dimension) and stamps the
+    new embedder identity in store_meta. If anything fails, the store keeps its
+    old vectors and identity; the backup is a second line of defense.
 
     Parameters
     ----------
@@ -70,8 +71,10 @@ def reembed_store(conn: sqlite3.Connection) -> dict:
     Returns
     -------
     dict
-        ``count`` (vectors written), ``model`` and ``dim`` (the new identity).
+        ``count`` (vectors written), ``model`` and ``dim`` (the new identity),
+        and ``backup`` (path of the pre-run snapshot).
     """
+    backup_path = db.backup(conn, "pre-reembed")
     cache: dict[str, list[float]] = {}
     _embed_all(db.list_summaries(conn), cache)
 
@@ -91,4 +94,4 @@ def reembed_store(conn: sqlite3.Connection) -> dict:
     except BaseException:
         conn.rollback()
         raise
-    return {"count": len(vectors), "model": MODEL_NAME, "dim": dim}
+    return {"count": len(vectors), "model": MODEL_NAME, "dim": dim, "backup": backup_path}

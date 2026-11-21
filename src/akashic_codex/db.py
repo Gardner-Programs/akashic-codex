@@ -6,6 +6,7 @@ Postgres, this is the only file that should need to change.
 
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import sqlite_vec
@@ -391,6 +392,43 @@ def delete_vector(conn: sqlite3.Connection, conv_id: int) -> None:
             WHERE conversation_id = ?""",
             (conv_id,),
         )
+
+
+def backup(conn: sqlite3.Connection, label: str = "backup") -> Path:
+    """Write a consistent snapshot of the database next to the original file.
+
+    Uses SQLite's online backup API, so the copy is consistent even if another
+    process (such as the auto-save hook) writes during it. The file is named
+    ``<db file>.<label>-<timestamp>`` in the same directory.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open connection to a file-backed database.
+    label : str, optional
+        Short tag for the filename, such as "pre-reembed" (default "backup").
+
+    Returns
+    -------
+    Path
+        Path of the backup file.
+
+    Raises
+    ------
+    RuntimeError
+        If the database is in-memory and so has no file to back up next to.
+    """
+    db_file = conn.execute("PRAGMA database_list").fetchone()["file"]
+    if not db_file:
+        raise RuntimeError("Cannot back up an in-memory database")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = Path(f"{db_file}.{label}-{stamp}")
+    target = sqlite3.connect(dest)
+    try:
+        conn.backup(target)
+    finally:
+        target.close()
+    return dest
 
 
 def list_summaries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
