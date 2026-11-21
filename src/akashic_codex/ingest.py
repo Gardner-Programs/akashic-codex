@@ -5,19 +5,146 @@ The weak link in any memory system is how easily a conversation gets saved, so
 keep this to a single simple step (paste, file drop, or batch export).
 """
 
+import re
 import sqlite3
+from collections import Counter
 
 from akashic_codex import db
 from akashic_codex.embeddings import MODEL_NAME, embed
 from akashic_codex.summarizers import SUMMARIZER, summarize
 from akashic_codex.titlers import make_title
 
+_TAG_STOPWORDS = frozenset(
+    [
+        "a",
+        "about",
+        "above",
+        "after",
+        "again",
+        "against",
+        "all",
+        "am",
+        "an",
+        "and",
+        "any",
+        "are",
+        "as",
+        "at",
+        "be",
+        "because",
+        "been",
+        "before",
+        "being",
+        "below",
+        "between",
+        "both",
+        "but",
+        "by",
+        "can",
+        "did",
+        "do",
+        "does",
+        "doing",
+        "down",
+        "during",
+        "each",
+        "few",
+        "for",
+        "from",
+        "further",
+        "had",
+        "has",
+        "have",
+        "having",
+        "he",
+        "her",
+        "here",
+        "hers",
+        "herself",
+        "him",
+        "himself",
+        "his",
+        "how",
+        "i",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "itself",
+        "just",
+        "me",
+        "more",
+        "most",
+        "my",
+        "myself",
+        "no",
+        "nor",
+        "not",
+        "of",
+        "off",
+        "on",
+        "once",
+        "only",
+        "or",
+        "other",
+        "our",
+        "ours",
+        "ourselves",
+        "out",
+        "over",
+        "own",
+        "same",
+        "she",
+        "should",
+        "so",
+        "some",
+        "such",
+        "than",
+        "that",
+        "the",
+        "their",
+        "theirs",
+        "them",
+        "themselves",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "to",
+        "too",
+        "under",
+        "until",
+        "up",
+        "very",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "who",
+        "whom",
+        "why",
+        "will",
+        "with",
+        "you",
+        "your",
+        "yours",
+        "yourself",
+        "yourselves",
+    ]
+)
+
 
 def suggest_tags(full_log: str) -> list[str]:
-    """Propose topic tags from the conversation content.
-
-    Placeholder implementation: returns the five most frequent words. A real
-    tagger (stopword filtering or a model) can swap in later behind this seam.
+    """Propose topic tags from frequent, non-stopword keywords.
 
     Parameters
     ----------
@@ -29,10 +156,9 @@ def suggest_tags(full_log: str) -> list[str]:
     list[str]
         Up to five suggested tag names.
     """
-    common = {}
-    for word in full_log.split():
-        common[word] = common.get(word, 0) + 1
-    return sorted(common, key=common.get, reverse=True)[:5]
+    words = re.findall(r"[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*", full_log.lower())
+    counts = Counter(word for word in words if word not in _TAG_STOPWORDS)
+    return sorted(counts, key=lambda word: (-counts[word], word))[:5]
 
 
 def ensure_embedder_identity(conn: sqlite3.Connection, vector: list[float]) -> None:

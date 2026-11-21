@@ -27,7 +27,12 @@ from akashic_codex.db import (
     upsert_conversation,
 )
 from akashic_codex.embeddings import MODEL_NAME, embed
-from akashic_codex.ingest import ensure_embedder_identity, save_conversation, save_session
+from akashic_codex.ingest import (
+    ensure_embedder_identity,
+    save_conversation,
+    save_session,
+    suggest_tags,
+)
 from akashic_codex.search import assert_active_embedder, fuse, search
 from akashic_codex.summarizers import (
     SUMMARIZER,
@@ -131,9 +136,29 @@ def test_save_conversations_searching(db_conn):
 
 
 def test_tag_saving(db_conn):
-    conv_id = save_conversation(db_conn, "tag testing full log tag test", "tag testing")
+    conv_id = save_conversation(
+        db_conn,
+        "The database stores conversation data. Database indexing makes search fast.",
+        "Database search",
+    )
     tags = get_tags(db_conn, conv_id)
-    assert "tag" in tags
+    assert "database" in tags
+    assert "the" not in tags
+    assert "and" not in tags
+
+
+def test_suggest_tags_filters_stopwords_and_normalizes_keywords():
+    assert suggest_tags("The API, the API! Stores data; and data.") == ["api", "data", "stores"]
+
+
+def test_suggest_tags_returns_at_most_five_keywords_with_stable_ties():
+    assert suggest_tags("zeta alpha beta gamma delta epsilon") == [
+        "alpha",
+        "beta",
+        "delta",
+        "epsilon",
+        "gamma",
+    ]
 
 
 def test_set_meta_then_get_meta_returns_value(db_conn):
