@@ -49,6 +49,11 @@ Tier 1, cheap: rank over summaries. Tier 2, expensive: load full_log only on a m
 
 Hybrid ranking combines keyword search (FTS5, high precision, exact terms) with semantic search (vectors, high recall, catches rephrasings). Merge and de-duplicate into one ranked list. Return lightweight rows from search; never return full_log from the search call.
 
+Tags are suggested once during ingest from frequent transcript keywords. The
+offline extractor lowercases words, ignores punctuation and common English
+stopwords, then returns up to five keywords with deterministic alphabetical
+tie-breaking. Tags complement search metadata and require no model service.
+
 ## The embedding rule
 
 Pick ONE embedding model and use it for everything written to and queried against the store. Vectors from different models are not comparable. Use a local model (`all-MiniLM-L6-v2`, 384 dims, via sentence-transformers) to stay vendor-independent. Store the model name so future-you can re-embed if you ever switch. The schema vector dimension must match the model.
