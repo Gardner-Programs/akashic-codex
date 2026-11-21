@@ -81,6 +81,13 @@ Session-keyed writes update the existing conversation row first and insert only
 for a new session. This avoids consuming an AUTOINCREMENT id on each subsequent
 turn without changing the schema or requiring a migration.
 
+The extractive summarizer splits sentences within transcript lines so speaker
+turns and list items remain useful units. It removes common heading/list
+markers and skips fragments shorter than 20 characters when substantive units
+exist. Ollama output has a generous 1,200-character soft cap: verbose output is
+trimmed at the last sentence boundary within the cap, while a lone overlong
+sentence is preserved whole.
+
 Session ingest links threads when the new full transcript contains an existing
 conversation's complete transcript verbatim. The match must be at least 200
 non-whitespace characters; short common exchanges are not reliable evidence.

@@ -54,6 +54,11 @@ with a heuristic title. To regenerate titles later (after an outage, or after
 switching models), run `retitle` (only "Untitled" rows) or `retitle --all`.
 Like `reembed`, it writes a backup first.
 
+The extractive summarizer treats transcript lines and dialogue turns as units,
+splits prose sentences within each line, and ignores short structural fragments.
+Ollama summaries are trimmed at a sentence boundary near 1,200 characters when
+a model is unusually verbose. A single sentence longer than that stays intact.
+
 If a summarizer outage leaves summaries empty, regenerate them with the active
 backend. By default only empty summaries are selected; use `--all` to rebuild
 every summary. The command backs up the database first and re-embeds each
