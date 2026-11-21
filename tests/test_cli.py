@@ -91,3 +91,21 @@ def test_serve_api_launches_server(monkeypatch):
     run(monkeypatch, "serve_api")
     assert captured["a"][0] == "akashic_codex.api:app"
     assert captured["k"]["port"] == 8000
+
+
+def test_cli_reembed_with_yes_skips_prompt(cli_db, tmp_path, monkeypatch, capsys):
+    run(monkeypatch, "init")
+    convo = tmp_path / "c.txt"
+    convo.write_text("We picked SQLite.", encoding="utf-8")
+    run(monkeypatch, "save", str(convo))
+    run(monkeypatch, "reembed", "--yes")
+    out = capsys.readouterr().out
+    assert "Re-embed 1 conversations" in out
+    assert "Re-embedded 1 conversations" in out
+
+
+def test_cli_reembed_aborts_without_confirmation(cli_db, monkeypatch, capsys):
+    run(monkeypatch, "init")
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+    run(monkeypatch, "reembed")
+    assert "Aborted" in capsys.readouterr().out

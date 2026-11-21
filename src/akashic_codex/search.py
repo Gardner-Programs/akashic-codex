@@ -21,7 +21,7 @@ def assert_active_embedder(conn: sqlite3.Connection) -> None:
         raise RuntimeError(
             f"This store's vectors were built with '{stored}', but the active "
             f"embedding model is '{MODEL_NAME}'. Searching would compare "
-            f"incomparable vectors. Re-embed the store or restore the original model."
+            f"incomparable vectors. Run `reembed` to move the store, or restore the original model."
         )
 
 

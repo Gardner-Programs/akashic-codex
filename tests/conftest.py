@@ -40,3 +40,4 @@ def seeded_conn(db_conn):
 def mock_embed(monkeypatch):
     monkeypatch.setattr("akashic_codex.ingest.embed", fake_embed)
     monkeypatch.setattr("akashic_codex.search.embed", fake_embed)
+    monkeypatch.setattr("akashic_codex.reembed.embed", fake_embed)

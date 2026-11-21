@@ -39,6 +39,22 @@ python -m akashic_codex.cli search "what database did we pick for local storage"
 python -m akashic_codex.cli show 1
 ```
 
+### Switching embedding models
+
+Every vector in a store must come from one model, so saves and searches refuse to
+run if the active model differs from the one the store was built with. To switch,
+set `AKASHIC_EMBEDDING_MODEL` to the new model and rebuild every vector in one shot:
+
+```bash
+AKASHIC_EMBEDDING_MODEL=all-mpnet-base-v2 python -m akashic_codex.cli reembed
+```
+
+It shows the plan (count, old and new model, cost) and asks before running. The
+swap is atomic: the vector table is recreated at the new dimension and the stored
+model identity updated in a single transaction, so a failure leaves the store as
+it was. Running it with the same model just rebuilds the index. Remember to give
+the auto-save hook the same `AKASHIC_EMBEDDING_MODEL`.
+
 The `examples/` folder has a few sample conversations to try. `docs/demo.sh` is the
 scripted version of the flow above, used to record the demo GIF.
 
@@ -137,10 +153,11 @@ Active development. Roadmap steps 1-9 are built and tested.
 - [x] Embeddings + semantic vector search (`sqlite-vec`)
 - [x] Hybrid search (reciprocal rank fusion)
 - [x] Ingest pipeline (`save_conversation`: summarize, tag, embed, store)
-- [x] CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp`)
+- [x] CLI (`init` / `save` / `search` / `show` / `reembed` / `serve_api` / `serve_mcp`)
 - [x] REST API (FastAPI: save / search / show)
 - [x] MCP server (expose `search_memory` / `get_conversation` as tools)
 - [x] Auto-save (Claude Code `Stop` hook: upsert-by-session, platform adapter seam)
+- [x] Re-embed command (atomic model switch, guarded on both read and write)
 - [ ] Polish (web view or TUI for demos)
 
 CI runs ruff and pytest on every change. See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture and full roadmap.
@@ -154,8 +171,9 @@ src/akashic_codex/
   embeddings.py            single fixed embedding model
   ingest.py                save pipeline: summarize, tag, embed, store
   search.py                two-tier hybrid retrieval
+  reembed.py               atomic rebuild of every vector on the active model
   adapters.py              per-platform transcript adapters (Claude Code today; more via #21)
-  cli.py                   command-line entry point (init/save/search/show/serve_api/serve_mcp/claude-hook)
+  cli.py                   command-line entry point (init/save/search/show/reembed/serve_api/serve_mcp/claude-hook)
   api.py                   FastAPI REST layer
   mcp_server.py            MCP server layer (read-only tools over stdio)
 tests/                     pytest

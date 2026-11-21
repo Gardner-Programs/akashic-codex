@@ -35,13 +35,13 @@ def suggest_tags(full_log: str) -> list[str]:
 
 
 def ensure_embedder_identity(conn: sqlite3.Connection, vector: list[float]) -> None:
-    """Record which model built this store's vectors, exactly once.
+    """Record which model built this store's vectors, and refuse to mix models.
 
-    Idempotent: on the first call (an unstamped store) this writes the embedder
-    identity into store_meta as two rows, the model name and the vector
-    dimension; on every later call it is a no-op. A store commits to one
-    embedding model for its lifetime, so this identity is what the search layer
-    later checks against to refuse mixing incomparable vectors.
+    On the first call (an unstamped store) this writes the embedder identity
+    into store_meta as two rows, the model name and the vector dimension. On
+    every later call it checks the active model against the stored one and
+    raises on a mismatch, so a save can never add a vector from a different
+    model than the rest of the store. Search runs the same check on read.
 
     Parameters
     ----------
@@ -51,10 +51,22 @@ def ensure_embedder_identity(conn: sqlite3.Connection, vector: list[float]) -> N
         A freshly produced embedding; its length is recorded as the store's
         embedding dimension, so the dimension stays derived from a real vector
         rather than hardcoded.
+
+    Raises
+    ------
+    RuntimeError
+        If the store was built with a different embedding model.
     """
-    if db.get_meta(conn, "embedding_model") is None:
+    stored = db.get_meta(conn, "embedding_model")
+    if stored is None:
         db.set_meta(conn, "embedding_model", MODEL_NAME)
         db.set_meta(conn, "embedding_dim", str(len(vector)))
+    elif stored != MODEL_NAME:
+        raise RuntimeError(
+            f"This store's vectors were built with '{stored}', but the active "
+            f"embedding model is '{MODEL_NAME}'. Saving would mix incomparable "
+            f"vectors. Run `reembed` to move the store, or restore the original model."
+        )
 
 
 def save_conversation(
@@ -63,8 +75,9 @@ def save_conversation(
     """Store a conversation end to end and return its id.
 
     Runs the full ingest pipeline once, at save time: derive a title, summarize,
-    suggest tags, insert the conversation (with the summary, so the FTS trigger
-    indexes it), link its tags, embed the summary, and store the vector.
+    suggest tags, embed the summary (refusing a model mismatch before anything is
+    written), insert the conversation (with the summary, so the FTS trigger
+    indexes it), link its tags, and store the vector.
 
     Parameters
     ----------
@@ -86,14 +99,14 @@ def save_conversation(
         title = "Untitled"
     summary = summarize(full_log)
     tags = suggest_tags(full_log)
+    vector = embed(summary)
+    ensure_embedder_identity(conn, vector)
     conv_id = db.insert_conversation(
         conn, title, full_log, summarizer=SUMMARIZER, summary=summary, source=source
     )
     for tag in tags:
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)
-    vector = embed(summary)
-    ensure_embedder_identity(conn, vector)
     db.insert_vector(conn, conv_id, vector)
     return conv_id
 
@@ -133,6 +146,8 @@ def save_session(conn, session_id, full_log, title=None, source=None, thread_id=
         title = "Untitled"
     summary = summarize(full_log)
     tags = suggest_tags(full_log)
+    vector = embed(summary)
+    ensure_embedder_identity(conn, vector)
     conv_id = db.upsert_conversation(
         conn,
         session_id,
@@ -146,8 +161,6 @@ def save_session(conn, session_id, full_log, title=None, source=None, thread_id=
     for tag in tags:
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)
-    vector = embed(summary)
-    ensure_embedder_identity(conn, vector)
     db.delete_vector(conn, conv_id)
     db.insert_vector(conn, conv_id, vector)
     return conv_id
