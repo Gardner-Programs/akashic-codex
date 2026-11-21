@@ -65,6 +65,11 @@ summary, and vector, and SessionEnd runs the full derived-data pipeline. The fir
 qualifying Stop still creates a searchable row. This reduces repeated generation
 and embedding work while keeping the transcript current throughout the session.
 
+Database snapshots written by `reembed`, `retitle`, and `resummarize` are
+retained per operation label. `AKASHIC_BACKUP_RETENTION` sets the positive number
+to keep, defaulting to 5; each new snapshot prunes older snapshots only for its
+own label.
+
 ## Two AI backends, two different rules
 
 The system uses AI in two places, and they have opposite swap rules. Do not conflate them.

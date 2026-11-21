@@ -431,14 +431,32 @@ def backup(conn: sqlite3.Connection, label: str = "backup") -> Path:
     db_file = conn.execute("PRAGMA database_list").fetchone()["file"]
     if not db_file:
         raise RuntimeError("Cannot back up an in-memory database")
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    retention = int(os.environ.get("AKASHIC_BACKUP_RETENTION", "5"))
+    if retention < 1:
+        raise ValueError("AKASHIC_BACKUP_RETENTION must be at least 1")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     dest = Path(f"{db_file}.{label}-{stamp}")
     target = sqlite3.connect(dest)
     try:
         conn.backup(target)
     finally:
         target.close()
+    prune_backups(Path(db_file), label, retention)
     return dest
+
+
+def prune_backups(db_path: Path, label: str, keep: int) -> int:
+    """Keep the newest ``keep`` snapshots for one backup label.
+
+    Returns the number of deleted snapshots.
+    """
+    if keep < 1:
+        raise ValueError("Backup retention must be at least 1")
+    snapshots = sorted(db_path.parent.glob(f"{db_path.name}.{label}-*"), key=lambda path: path.name)
+    expired = snapshots[:-keep]
+    for path in expired:
+        path.unlink()
+    return len(expired)
 
 
 def list_for_retitle(conn: sqlite3.Connection, only_untitled: bool = True) -> list[sqlite3.Row]:

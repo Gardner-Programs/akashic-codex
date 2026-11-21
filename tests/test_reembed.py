@@ -178,3 +178,18 @@ def test_backup_refuses_in_memory_database():
     conn.row_factory = sqlite3.Row
     with pytest.raises(RuntimeError, match="in-memory"):
         backup(conn)
+
+
+def test_backup_retains_newest_snapshots_per_label(db_conn, tmp_path, monkeypatch):
+    monkeypatch.setenv("AKASHIC_BACKUP_RETENTION", "2")
+    first = backup(db_conn, "pre-reembed")
+    second = backup(db_conn, "pre-retitle")
+    third = backup(db_conn, "pre-reembed")
+    fourth = backup(db_conn, "pre-reembed")
+
+    assert not first.exists()
+    assert second.exists()
+    assert third.exists()
+    assert fourth.exists()
+    assert len(list(tmp_path.glob("test.db.pre-reembed-*"))) == 2
+    assert len(list(tmp_path.glob("test.db.pre-retitle-*"))) == 1
