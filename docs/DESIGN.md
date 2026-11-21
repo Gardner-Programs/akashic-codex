@@ -35,6 +35,14 @@ The model does generation only. The service owns storage, summarization-at-inges
 
 See `schema.sql`.
 
+## Dependency compatibility
+
+Direct dependencies are listed in `requirements.txt` with supported major
+version ranges. CI runs weekly as well as on changes, installing the newest
+releases within those ranges before linting and running the test suite. This
+surfaces upstream compatibility breaks while keeping fresh installs away from
+unreviewed major releases.
+
 ## Retrieval: two tiers + hybrid
 
 Tier 1, cheap: rank over summaries. Tier 2, expensive: load full_log only on a match.
