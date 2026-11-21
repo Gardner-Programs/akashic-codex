@@ -4,11 +4,20 @@ Embedding is faked so each test controls the vectors (and their dimension)
 without loading the real model.
 """
 
+import sqlite3
+
 import pytest
 import sqlite_vec
 
 from akashic_codex import reembed
-from akashic_codex.db import get_meta, insert_conversation, insert_vector, search_vectors, set_meta
+from akashic_codex.db import (
+    backup,
+    get_meta,
+    insert_conversation,
+    insert_vector,
+    search_vectors,
+    set_meta,
+)
 from akashic_codex.ingest import ensure_embedder_identity, save_conversation
 
 
@@ -134,3 +143,38 @@ def test_save_on_mismatched_model_writes_nothing(db_conn, mock_embed):
     with pytest.raises(RuntimeError):
         save_conversation(db_conn, "User: hi. Assistant: hello.")
     assert db_conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 0
+
+
+def test_reembed_backs_up_before_changing_anything(db_conn, monkeypatch):
+    seed(db_conn)
+    monkeypatch.setattr(reembed, "embed", lambda text: [0.5] * 384)
+    result = reembed.reembed_store(db_conn)
+    snapshot = sqlite3.connect(result["backup"])
+    try:
+        model = snapshot.execute(
+            "SELECT value FROM store_meta WHERE key = 'embedding_model'"
+        ).fetchone()[0]
+        count = snapshot.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
+    finally:
+        snapshot.close()
+    assert model == "old-model"
+    assert count == 3
+
+
+def test_reembed_backup_survives_a_failed_run(db_conn, tmp_path, monkeypatch):
+    seed(db_conn)
+
+    def broken(text):
+        raise RuntimeError("model crashed")
+
+    monkeypatch.setattr(reembed, "embed", broken)
+    with pytest.raises(RuntimeError):
+        reembed.reembed_store(db_conn)
+    assert list(tmp_path.glob("test.db.pre-reembed-*"))
+
+
+def test_backup_refuses_in_memory_database():
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    with pytest.raises(RuntimeError, match="in-memory"):
+        backup(conn)

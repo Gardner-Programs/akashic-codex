@@ -49,7 +49,8 @@ set `AKASHIC_EMBEDDING_MODEL` to the new model and rebuild every vector in one s
 AKASHIC_EMBEDDING_MODEL=all-mpnet-base-v2 python -m akashic_codex.cli reembed
 ```
 
-It shows the plan (count, old and new model, cost) and asks before running. The
+It shows the plan (count, old and new model, cost) and asks before running. It
+always writes a snapshot next to the database first (`akashic.db.pre-reembed-<timestamp>`). The
 swap is atomic: the vector table is recreated at the new dimension and the stored
 model identity updated in a single transaction, so a failure leaves the store as
 it was. Running it with the same model just rebuilds the index. Remember to give

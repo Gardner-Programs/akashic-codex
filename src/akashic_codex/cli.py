@@ -80,6 +80,7 @@ def cmd_reembed(args):
         old += f" ({plan['old_dim']} dims)"
     print(f"Re-embed {plan['count']} conversations: {old} -> {plan['new_model']}")
     print(f"Estimated cost: ${plan['cost']:.2f} (local model)")
+    print("A backup of the database is written first.")
     if not args.yes and input("Proceed? [y/N] ").strip().lower() != "y":
         print("Aborted")
         return
