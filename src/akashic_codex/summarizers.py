@@ -24,6 +24,10 @@ AKASHIC_OLLAMA_HOST = os.environ.get("AKASHIC_OLLAMA_HOST", "http://localhost:11
 
 # Character budget for the extractive lead summary.
 SUMMARY_MAX_CHARS = 300
+# Ollama is asked for a short summary, but some models are verbose. This cap is
+# intentionally generous and only applied at a sentence boundary.
+OLLAMA_SUMMARY_MAX_CHARS = 1200
+MIN_EXTRACTIVE_UNIT_CHARS = 20
 
 
 def summarize(full_log: str) -> str:
@@ -71,8 +75,9 @@ def _extractive(full_log: str) -> str:
         The lead-sentence summary.
     """
 
-    raw = re.split(r"[.?!]+", full_log)
-    sentences = [s.strip() for s in raw if s.strip()]
+    sentences = _extractive_units(full_log)
+    if not sentences:
+        return ""
     if len(sentences) <= 1:
         return " ".join(sentences)[:SUMMARY_MAX_CHARS]
     sentences_vectors = [embed(sen) for sen in sentences]
@@ -93,6 +98,37 @@ def _extractive(full_log: str) -> str:
     if len(selected) == 0:
         return sentences[ranked_idx[0]][:SUMMARY_MAX_CHARS]
     return " ".join(sentences[i] for i in sorted(selected))
+
+
+def _extractive_units(full_log: str) -> list[str]:
+    """Split prose within lines/turns and discard structural fragments."""
+    units = []
+    for line in full_log.splitlines():
+        # Markdown headings are labels for the content that follows, not
+        # sentence candidates, even when the heading itself is long.
+        if re.match(r"^\s*#{1,6}\s+", line):
+            continue
+        line = re.sub(r"^\s*(?:User|Assistant)\s*:\s*", "", line, flags=re.IGNORECASE)
+        line = re.sub(r"^\s*(?:[-*•]+|\d+[.)])\s*", "", line)
+        # A heading marker is formatting, while its text may still be useful.
+        line = re.sub(r"^\s*#+\s*", "", line)
+        for unit in re.split(r"(?<=[.?!])\s+", line.strip()):
+            unit = unit.strip()
+            if len(unit) >= MIN_EXTRACTIVE_UNIT_CHARS:
+                units.append(unit)
+    if not units:
+        # Keep short, meaningful inputs usable, while punctuation-only labels
+        # and markers still disappear.
+        fragments = []
+        for line in full_log.splitlines():
+            if not line.strip() or re.match(r"^\s*#{1,6}\s+", line):
+                continue
+            line = re.sub(r"^\s*(?:User|Assistant)\s*:\s*", "", line.strip(), flags=re.IGNORECASE)
+            line = re.sub(r"^\s*(?:[-*•]+|\d+[.)])\s*", "", line)
+            fragments.append(line.strip())
+        if len(fragments) == 1 and re.search(r"[A-Za-z]{3}", fragments[0]):
+            return fragments
+    return units
 
 
 def _ollama(full_log: str, model: str) -> str:
@@ -126,6 +162,21 @@ def _ollama(full_log: str, model: str) -> str:
     )
     try:
         with urllib.request.urlopen(request) as response:
-            return json.load(response)["response"]
+            return _soft_cap_ollama(json.load(response)["response"])
     except urllib.error.URLError as e:
         raise RuntimeError(f"Ollama unreachable at {AKASHIC_OLLAMA_HOST}, is it running?") from e
+
+
+def _soft_cap_ollama(summary: str) -> str:
+    """Trim verbose output at the last sentence boundary within the soft cap."""
+    summary = summary.strip()
+    if len(summary) <= OLLAMA_SUMMARY_MAX_CHARS:
+        return summary
+    boundaries = list(re.finditer(r"[.!?](?:[\"')\]]*)?(?=\s|$)", summary))
+    if not boundaries:
+        return summary
+    within_cap = [boundary for boundary in boundaries if boundary.end() <= OLLAMA_SUMMARY_MAX_CHARS]
+    # Preserve at least one complete sentence when the first sentence itself
+    # runs past the cap. This keeps the cap soft without retaining all later text.
+    boundary = within_cap[-1] if within_cap else boundaries[0]
+    return summary[: boundary.end()].rstrip()

@@ -35,6 +35,7 @@ from akashic_codex.ingest import (
 )
 from akashic_codex.search import assert_active_embedder, fuse, search
 from akashic_codex.summarizers import (
+    OLLAMA_SUMMARY_MAX_CHARS,
     SUMMARIZER,
     SUMMARY_MAX_CHARS,
     _extractive,
@@ -231,6 +232,30 @@ def test_extractive_summarizes_multi_sentence_within_budget():
 
 def test_extractive_returns_empty_for_empty_input():
     assert _extractive("") == ""
+    assert _extractive("#19\n- Done") == ""
+    assert _extractive("User: Hi there.") == "Hi there."
+
+
+def test_extractive_treats_dialogue_lines_as_units_and_skips_fragments(monkeypatch):
+    embedded = []
+
+    def fake_embed(text):
+        embedded.append(text)
+        return [1.0, 0.0]
+
+    monkeypatch.setattr("akashic_codex.summarizers.embed", fake_embed)
+    text = (
+        "#19\n# A surprisingly long heading that should not be summarized\n"
+        "User: We chose SQLite for local storage.\n"
+        "Assistant: The database stays private and works offline.\n"
+        "1. Keep the transcript as the source of truth.\n- Done"
+    )
+    result = _extractive(text)
+    assert "#19" not in result
+    assert "Done" not in result
+    assert len(embedded) == 3
+    assert all(len(unit) >= 20 for unit in embedded)
+    assert all("heading" not in unit for unit in embedded)
 
 
 def test_summarize_defaults_to_extractive(monkeypatch):
@@ -258,6 +283,34 @@ def test_ollama_returns_model_response(monkeypatch):
     fake_response = io.BytesIO(b'{"response": "a mocked summary"}')
     monkeypatch.setattr(urllib.request, "urlopen", lambda request: fake_response)
     assert _ollama(conversation, "llama3") == "a mocked summary"
+
+
+def test_ollama_soft_caps_at_sentence_boundary(monkeypatch):
+    first = "A useful first sentence."
+    second = "A useful second sentence."
+    response = (first + " " + second + " " + "A trailing sentence. " * 60).strip()
+    fake_response = io.BytesIO(json.dumps({"response": response}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request: fake_response)
+    result = _ollama("conversation", "llama3")
+    assert len(result) <= OLLAMA_SUMMARY_MAX_CHARS
+    assert result.endswith(".")
+    assert result.startswith(first + " " + second)
+    assert result.count("A trailing sentence.") < 60
+
+
+def test_ollama_keeps_sentence_longer_than_soft_cap(monkeypatch):
+    response = "A" * (OLLAMA_SUMMARY_MAX_CHARS + 100) + "."
+    fake_response = io.BytesIO(json.dumps({"response": response}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request: fake_response)
+    assert _ollama("conversation", "llama3") == response
+
+
+def test_ollama_keeps_first_overlong_sentence_without_following_sentences(monkeypatch):
+    first = "A" * (OLLAMA_SUMMARY_MAX_CHARS + 100) + "."
+    response = first + " A later sentence should be omitted."
+    fake_response = io.BytesIO(json.dumps({"response": response}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request: fake_response)
+    assert _ollama("conversation", "llama3") == first
 
 
 def test_ollama_fails_loud_when_unreachable(monkeypatch):
