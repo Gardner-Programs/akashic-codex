@@ -15,7 +15,7 @@ Three design priorities, in order:
 ```
    AI model (Claude / Gemini / Ollama / ...)   <- generation only; just a client
                   |
-        interface (CLI + REST + MCP)            <- stable contract: save, search, get
+        interface (CLI + web view + REST + MCP)  <- stable contract: save, search, get
                   |
           core service (Python)                 <- ingest, embed, search
                   |
@@ -127,6 +127,11 @@ To safely evolve the database schema over time without data loss or breaking exi
 7. **REST API.** Wrap the core in FastAPI so any client can call it.
 8. **MCP server.** Expose `search_memory` and `get_conversation` as MCP tools so any MCP-capable model can use the store directly.
 9. **Polish.** Small web view or TUI for demos; README screenshots.
+
+The polish step includes a lightweight browser at `/ui`, served by the REST
+application. It browses recent conversation summaries, submits hybrid searches,
+and opens the full transcript only after a user selects a result. The page uses
+the existing JSON API, ships as package data, and adds no frontend dependencies.
 
 ## Stretch ideas
 
