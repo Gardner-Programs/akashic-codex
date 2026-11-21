@@ -55,7 +55,7 @@ A `mock_embed` fixture in `conftest.py` patches `embed` at its usage sites (`ing
 
 - **Embedder identity / `store_meta`: DONE (PR #16).** Re-embed (#18) built on it.
 - **Structured messages:** conversations are an opaque `full_log` blob; a `messages` table (role + per-turn `model`) would support swapping models mid-conversation and precise context re-injection once a chat exceeds a model's window. Keep `full_log` as the source of truth. Trigger: import adapters or a render/chat UI. Backlog #20.
-- **No schema migrations yet:** schema changes rely on `CREATE TABLE IF NOT EXISTS`, which cannot alter an existing DB. Adding the `summarizer` column to a store created before PR #22 needed a manual `ALTER TABLE conversations ADD COLUMN summarizer TEXT`. A fresh `init` is fine; a lightweight migration story is worth adding once there's real data that can't just be recreated. **Now filed as #25** (schema versioning + forward-only migrations); #19 sidestepped it by recreating the dev DB.
+- **Schema versioning and migrations (#25): DONE.** `init_db()` tracks `schema_version` in `store_meta` and applies ordered forward-only migrations from `src/akashic_codex/migrations.py`. Unversioned stores are classified by their existing conversation columns, and invalid/newer versions fail clearly.
 
 ## Next step
 
