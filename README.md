@@ -16,6 +16,12 @@ Save conversations from different models, then find one with a query worded noth
 
 Conversations are stored with a title and a short summary alongside the full transcript. Search happens in two tiers: first it ranks the lightweight summaries (fast and cheap), then it loads the full transcript only for a match (expensive, done rarely). Search is hybrid: keyword search via SQLite FTS5 for precision, plus semantic vector search via `sqlite-vec` so it finds the right conversation even when you phrase things differently than you did before.
 
+At ingest, role-prefixed transcript lines are also parsed into a `messages` table
+with ordered turns, role, content, and an optional model label (`Assistant
+[model=name]: ...`). This structure is derived data: `conversations.full_log`
+remains the source of truth, and transcripts without explicit model labels leave
+the per-turn model empty.
+
 Tags are generated at save time from the most frequent transcript keywords. Common English stopwords are filtered, words are normalized to lowercase, and punctuation is ignored; tag generation is deterministic and works offline.
 
 Any model talks to the same simple core (save, search, get) through whichever interface fits: a CLI, a REST API, and an MCP server. No model-specific logic lives in the store, which is what makes models swappable.

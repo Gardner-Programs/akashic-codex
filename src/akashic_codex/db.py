@@ -172,6 +172,29 @@ def upsert_conversation(
     return row["id"]
 
 
+def replace_messages(conn: sqlite3.Connection, conversation_id: int, messages: list[dict]) -> None:
+    """Replace the structured turns derived from a conversation's full_log."""
+    with conn:
+        conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+        conn.executemany(
+            """INSERT INTO messages (conversation_id, turn_index, role, content, model)
+            VALUES (?, ?, ?, ?, ?)""",
+            [
+                (conversation_id, index, row["role"], row["content"], row["model"])
+                for index, row in enumerate(messages)
+            ],
+        )
+
+
+def get_messages(conn: sqlite3.Connection, conversation_id: int) -> list[sqlite3.Row]:
+    """Return structured turns in transcript order."""
+    return conn.execute(
+        "SELECT turn_index, role, content, model FROM messages "
+        "WHERE conversation_id = ? ORDER BY turn_index",
+        (conversation_id,),
+    ).fetchall()
+
+
 def update_session_log(conn: sqlite3.Connection, session_id: str, full_log: str) -> int | None:
     """Update only an existing session transcript, preserving its summary and vector."""
     with conn:

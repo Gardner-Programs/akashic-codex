@@ -47,5 +47,7 @@ def claude_transcript_to_log(transcript_path: str) -> str:
                 text = " ".join(b["text"] for b in content if b.get("type") == "text")
             if not text.strip():
                 continue
-            lines.append(f"{role.capitalize()}: {text}")
+            model = message.get("model")
+            label = f"{role.capitalize()} [model={model}]" if model else role.capitalize()
+            lines.append(f"{label}: {text}")
     return "\n".join(lines)

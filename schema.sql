@@ -31,6 +31,16 @@ CREATE TABLE IF NOT EXISTS store_meta (
     value  TEXT NOT NULL
 );
 
+-- Derived turn structure. full_log remains the canonical transcript.
+CREATE TABLE IF NOT EXISTS messages (
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    turn_index      INTEGER NOT NULL,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    model           TEXT,
+    PRIMARY KEY (conversation_id, turn_index)
+);
+
 -- Full-text search over title + summary (keyword search, high precision).
 -- Kept in sync with conversations by the three triggers below (insert/delete/update).
 CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
