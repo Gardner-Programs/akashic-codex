@@ -67,12 +67,24 @@ def cmd_claude_hook(args):
     data = json.loads(raw)
     session_id = data["session_id"]
     transcript_path = data["transcript_path"]
+    event = data.get("hook_event_name", "Stop")
     full_log = claude_transcript_to_log(transcript_path)
     min_chars = int(os.environ.get("AKASHIC_MIN_SESSION_CHARS", "200"))
     if len(full_log.strip()) < min_chars:
         print("Session below minimum length; skipped")
         return
     conn = db.connect()
+    policy = os.environ.get("AKASHIC_SUMMARY_POLICY", "each_turn").strip().lower()
+    if policy not in {"each_turn", "session_end"}:
+        raise ValueError("AKASHIC_SUMMARY_POLICY must be 'each_turn' or 'session_end'")
+    # Keep the transcript current without spending time on generation or embeddings.
+    # A new session still needs its initial summary so it is searchable.
+    if (
+        policy == "session_end"
+        and event != "SessionEnd"
+        and db.update_session_log(conn, session_id, full_log) is not None
+    ):
+        return
     from akashic_codex.summarizers import SUMMARIZER, _extractive, summarize
 
     try:

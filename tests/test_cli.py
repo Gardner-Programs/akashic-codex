@@ -224,3 +224,51 @@ def test_claude_hook_saves_sessions_at_minimum_length(cli_db, monkeypatch, tmp_p
 
     conn = db.connect()
     assert conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 1
+
+
+def test_claude_hook_session_end_policy_updates_raw_log_then_refreshes(
+    cli_db, monkeypatch, tmp_path
+):
+    import json
+
+    run(monkeypatch, "init")
+    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "0")
+    monkeypatch.setenv("AKASHIC_SUMMARY_POLICY", "session_end")
+    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "updated transcript")
+    payload = {"session_id": "s-policy", "transcript_path": "unused"}
+
+    # First Stop creates a searchable row.
+    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Initial summary")
+    monkeypatch.setattr(
+        sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()
+    )
+    run(monkeypatch, "claude-hook")
+    conn = db.connect()
+    original = conn.execute("SELECT summary, title FROM conversations").fetchone()
+    original_vector = conn.execute("SELECT embedding FROM summary_vectors").fetchone()[0]
+
+    # Later Stops only replace full_log and do not call the summarizer.
+    monkeypatch.setattr(
+        "akashic_codex.summarizers.summarize",
+        lambda _log: (_ for _ in ()).throw(AssertionError("should be deferred")),
+    )
+    payload["hook_event_name"] = "Stop"
+    monkeypatch.setattr(
+        sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()
+    )
+    run(monkeypatch, "claude-hook")
+    row = conn.execute("SELECT full_log, summary, title FROM conversations").fetchone()
+    assert row["full_log"] == "updated transcript"
+    assert row["summary"] == original["summary"]
+    assert row["title"] == original["title"]
+    updated_vector = conn.execute("SELECT embedding FROM summary_vectors").fetchone()[0]
+    assert updated_vector == original_vector
+
+    # SessionEnd refreshes the derived fields using the latest full transcript.
+    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Final summary")
+    payload["hook_event_name"] = "SessionEnd"
+    monkeypatch.setattr(
+        sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()
+    )
+    run(monkeypatch, "claude-hook")
+    assert conn.execute("SELECT summary FROM conversations").fetchone()[0] == "Final summary"

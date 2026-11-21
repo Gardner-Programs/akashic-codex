@@ -171,6 +171,16 @@ def upsert_conversation(
     return row["id"]
 
 
+def update_session_log(conn: sqlite3.Connection, session_id: str, full_log: str) -> int | None:
+    """Update only an existing session transcript, preserving its summary and vector."""
+    with conn:
+        row = conn.execute(
+            "UPDATE conversations SET full_log = ? WHERE session_id = ? RETURNING id",
+            (full_log, session_id),
+        ).fetchone()
+    return row["id"] if row else None
+
+
 def get_or_create_tag(conn: sqlite3.Connection, name: str) -> int:
     """Return the id of a tag, creating it if it does not exist.
 

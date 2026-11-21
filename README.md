@@ -172,6 +172,12 @@ Notes:
 - The hook starts a fresh process each turn and loads the embedding model on every
   run, so expect a brief pause per turn. That is fine for local single-user use;
   making it cheaper (a resident process, or summarizing less often) is future work.
+- `AKASHIC_SUMMARY_POLICY` controls derived data refreshes: `each_turn` (default)
+  summarizes, retitles, and re-embeds on every Stop; `session_end` updates only
+  `full_log` on Stops after the first saved turn, then refreshes summary, title,
+  and embedding on SessionEnd. Under `session_end`, register the same command for
+  both `Stop` and `SessionEnd` events in Claude Code settings. The first qualifying
+  Stop creates the row so the session is searchable while it is active.
 - If summarization fails in the hook, it saves the raw transcript with the offline
   extractive summary and records `extractive` as the summarizer. Manual saves still
   report summarizer failures. The `resummarize` command can regenerate those rows
