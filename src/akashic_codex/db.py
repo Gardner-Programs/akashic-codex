@@ -302,6 +302,67 @@ def get_summary_row(conn: sqlite3.Connection, conv_id: int) -> sqlite3.Row | Non
     return row
 
 
+def replace_message_chunks(
+    conn: sqlite3.Connection, conv_id: int, chunks: list[tuple[str, str]]
+) -> None:
+    """Upsert ordered turn chunks while preserving ids at existing positions."""
+    with conn:
+        existing = conn.execute(
+            "SELECT id, turn_index FROM message_chunks WHERE conversation_id = ?",
+            (conv_id,),
+        ).fetchall()
+        old_count = len(existing)
+        for index, (summary, content) in enumerate(chunks):
+            if index < old_count:
+                conn.execute(
+                    "UPDATE message_chunks SET summary = ?, content = ? "
+                    "WHERE conversation_id = ? AND turn_index = ?",
+                    (summary, content, conv_id, index),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO message_chunks (conversation_id, turn_index, summary, content) "
+                    "VALUES (?, ?, ?, ?)",
+                    (conv_id, index, summary, content),
+                )
+        conn.execute(
+            "DELETE FROM message_chunks WHERE conversation_id = ? AND turn_index >= ?",
+            (conv_id, len(chunks)),
+        )
+
+
+def get_message_chunk(conn: sqlite3.Connection, chunk_id: int) -> sqlite3.Row | None:
+    """Retrieve a stored turn chunk by its message id."""
+    return conn.execute(
+        "SELECT id, conversation_id, turn_index, summary, content FROM message_chunks WHERE id = ?",
+        (chunk_id,),
+    ).fetchone()
+
+
+def list_message_chunks(conn: sqlite3.Connection, conv_id: int) -> list[sqlite3.Row]:
+    """Return chunk summaries in conversation order without loading the transcript."""
+    return conn.execute(
+        "SELECT id, turn_index, summary FROM message_chunks "
+        "WHERE conversation_id = ? ORDER BY turn_index",
+        (conv_id,),
+    ).fetchall()
+
+
+def search_message_chunks(
+    conn: sqlite3.Connection, query: str, limit: int = 10
+) -> list[sqlite3.Row]:
+    """Find matching chunk summaries and return ids plus lightweight pointers."""
+    sanitized = _sanitize_fts_query(query)
+    if not sanitized:
+        return []
+    return conn.execute(
+        "SELECT c.id, c.conversation_id, c.turn_index, c.summary "
+        "FROM message_chunks_fts f JOIN message_chunks c ON c.id = f.rowid "
+        "WHERE message_chunks_fts MATCH ? LIMIT ?",
+        (sanitized, limit),
+    ).fetchall()
+
+
 def _sanitize_fts_query(query: str) -> str:
     """Quote each term so FTS5 treats the query as literal text.
 

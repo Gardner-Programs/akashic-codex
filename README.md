@@ -88,10 +88,12 @@ curl localhost:8000/conversations/1
 
 ### MCP server
 
-Exposes the read side of the store (`search_memory` and `get_conversation`) as
-MCP tools, so any MCP-capable model can recall your stored conversations
-directly. Saving stays on the CLI and REST API by design: over MCP a model can
-recall memory, not mutate it.
+Exposes the read side of the store (`search_memory`, `get_conversation`,
+`get_context`, `search_messages`, and `get_message`) as MCP tools, so any
+MCP-capable model can recall stored conversations directly. `get_context`
+returns a running brief, recent exchanges, and summary pointers for older
+exchanges. Search chunk summaries, then fetch a specific exchange by message id
+when needed. Saving stays on the CLI and REST API by design.
 
 The server speaks stdio and is normally launched by the MCP client, not by hand.
 Register it once with your client and it starts on demand.

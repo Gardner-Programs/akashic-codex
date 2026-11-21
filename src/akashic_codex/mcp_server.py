@@ -16,6 +16,7 @@ Launch (normally done by the MCP client, not by hand):
 from mcp.server.mcpserver import MCPServer
 
 from akashic_codex import db
+from akashic_codex.memory import build_context, get_message_chunk, search_chunks
 from akashic_codex.search import search
 
 mcp = MCPServer("AkashicCodex")
@@ -51,6 +52,42 @@ def get_conversation(conv_id: int) -> dict:
         if row is None:
             raise ValueError("No result by that id found.")
         return dict(row)
+    finally:
+        conn.close()
+
+
+@mcp.tool()
+def get_context(conv_id: int, recent_turns: int = 4) -> dict:
+    """Build brief, recent turns, and pointers for older conversation details."""
+    conn = db.connect()
+    try:
+        result = build_context(conn, conv_id, recent_turns)
+        if result is None:
+            raise ValueError("No result by that id found.")
+        return result
+    finally:
+        conn.close()
+
+
+@mcp.tool()
+def search_messages(query: str, limit: int = 10) -> list[dict]:
+    """Search per-turn summaries; use get_message to fetch a matching turn's full text."""
+    conn = db.connect()
+    try:
+        return search_chunks(conn, query, limit)
+    finally:
+        conn.close()
+
+
+@mcp.tool()
+def get_message(message_id: int) -> dict:
+    """Retrieve a full turn chunk by id returned from context or search_messages."""
+    conn = db.connect()
+    try:
+        result = get_message_chunk(conn, message_id)
+        if result is None:
+            raise ValueError("No message by that id found.")
+        return result
     finally:
         conn.close()
 

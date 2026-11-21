@@ -5,12 +5,42 @@ The weak link in any memory system is how easily a conversation gets saved, so
 keep this to a single simple step (paste, file drop, or batch export).
 """
 
+import re
 import sqlite3
 
 from akashic_codex import db
 from akashic_codex.embeddings import MODEL_NAME, embed
 from akashic_codex.summarizers import SUMMARIZER, summarize
 from akashic_codex.titlers import make_title
+
+
+def split_turn_chunks(full_log: str) -> list[str]:
+    """Split speaker-labeled transcripts into user/assistant exchange chunks."""
+    lines = full_log.splitlines()
+    chunks = []
+    current = []
+    saw_speaker = False
+    for line in lines:
+        if re.match(r"^(User|Assistant):", line, re.IGNORECASE):
+            saw_speaker = True
+            if (
+                current
+                and re.match(r"^User:", line, re.IGNORECASE)
+                and any(re.match(r"^Assistant:", item, re.IGNORECASE) for item in current)
+            ):
+                chunks.append("\n".join(current).strip())
+                current = []
+        current.append(line)
+    if current and "\n".join(current).strip():
+        chunks.append("\n".join(current).strip())
+    if not saw_speaker:
+        return [full_log] if full_log.strip() else []
+    return chunks
+
+
+def _store_chunks(conn: sqlite3.Connection, conv_id: int, full_log: str) -> None:
+    chunks = split_turn_chunks(full_log)
+    db.replace_message_chunks(conn, conv_id, [(summarize(chunk), chunk) for chunk in chunks])
 
 
 def suggest_tags(full_log: str) -> list[str]:
@@ -110,6 +140,7 @@ def save_conversation(
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)
     db.insert_vector(conn, conv_id, vector)
+    _store_chunks(conn, conv_id, full_log)
     return conv_id
 
 
@@ -166,4 +197,5 @@ def save_session(conn, session_id, full_log, title=None, source=None, thread_id=
         db.link_conversation_tag(conn, conv_id, tag_id)
     db.delete_vector(conn, conv_id)
     db.insert_vector(conn, conv_id, vector)
+    _store_chunks(conn, conv_id, full_log)
     return conv_id

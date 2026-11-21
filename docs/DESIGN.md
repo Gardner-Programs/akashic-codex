@@ -29,6 +29,7 @@ The model does generation only. The service owns storage, summarization-at-inges
 ## Data model
 
 `conversations` (id, title, summary, source, created_at, full_log)
+`message_chunks` (id, conversation_id, turn_index, summary, content), derived from the source transcript
 `tags` (id, name) and `conversation_tags` (many-to-many)
 `conversations_fts` (FTS5 over title + summary) for keyword search
 `summary_vectors` (vec0, embedding of the summary) for semantic search
@@ -65,11 +66,11 @@ Local-first, single file the user owns, zero server to run or secure, single-use
 5. **Ingest pipeline.** `summarize` + `suggest_tags`, wired into `save_conversation`.
 6. **CLI.** Make init / save / search / show all work end to end.
 7. **REST API.** Wrap the core in FastAPI so any client can call it.
-8. **MCP server.** Expose `search_memory` and `get_conversation` as MCP tools so any MCP-capable model can use the store directly.
+8. **MCP server.** Expose search and retrieval as MCP tools so any MCP-capable model can use the store directly.
 9. **Polish.** Small web view or TUI for demos; README screenshots.
 
 ## Stretch ideas
 
-Structured messages instead of an opaque `full_log` blob: a `messages` table (conversation_id, turn_index, role, content, model) so a conversation is a sequence of turns rather than one text document. Motivation is twofold. First, per-turn model attribution: the current conversation-level `source` cannot record that turn 1 was Claude and turn 3 was Gemini, but the project's goal is to let users swap models mid-conversation, so model belongs on the message, not the conversation. Second, context re-injection: the store exists to feed memory back into live conversations once they exceed a model's context window. Summaries are the compact fallback, but ideally you pass back whatever full context a given section needs, and structured turns let you select and re-inject precise spans rather than whole blobs. Keep `full_log` as the source of truth regardless: structure can be derived from the raw log, but a lost raw log cannot be recovered from structure. Deferred; search does not benefit (retrieval stays conversation-level) and nothing in the current roadmap needs it. Natural trigger: the import adapters (which already parse exports into turns) or a render/chat UI.
+Turn-level working memory: `message_chunks` stores summaries and source text for user/assistant exchanges derived from `full_log`, which remains authoritative. `get_context` returns the conversation brief, a configurable recent window, and ids plus summaries for older exchanges. `search_messages` searches chunk summaries and `get_message` retrieves a selected chunk by id. Chunks do not yet record model attribution; the transcript formats available today do not reliably provide it.
 
 Re-embedding command for switching embedding models: re-embed every summary with the new model in one shot, replace all vectors, update the stored model name, and (if dimensions change) drop and recreate the vector table. All-or-nothing; never mix two models' vectors. Prerequisite (step zero of this feature): the store must record its own embedder identity (model name + dimension), which it does not yet. Add a small `store_meta` table for this, written via generic `db.get_meta`/`set_meta` helpers so `db.py` stays decoupled from the embeddings layer. This is what lets search verify the active embedder matches the stored vectors and refuse to silently mix maps, and what gives the re-embed command an old model to migrate from. Add it before any store you care about exists; backfilling identity onto existing vectors means assuming the model they were built with. This is what makes the embedder "drag-and-drop" swappable for the user while staying internally consistent. If a paid backend (embedder or summarizer) is configured, estimate and surface token/cost before running so the user opts in knowingly; local backends report zero. Import adapters for Claude/Gemini/ChatGPT export formats. Encryption at rest. A "related conversations" link graph.

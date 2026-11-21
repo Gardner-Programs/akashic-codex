@@ -41,3 +41,4 @@ def mock_embed(monkeypatch):
     monkeypatch.setattr("akashic_codex.ingest.embed", fake_embed)
     monkeypatch.setattr("akashic_codex.search.embed", fake_embed)
     monkeypatch.setattr("akashic_codex.reembed.embed", fake_embed)
+    monkeypatch.setattr("akashic_codex.summarizers.embed", fake_embed)

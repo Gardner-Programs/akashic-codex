@@ -31,6 +31,34 @@ CREATE TABLE IF NOT EXISTS store_meta (
     value  TEXT NOT NULL
 );
 
+-- A chunk is normally one user/assistant exchange. It keeps stable retrieval
+-- units for agents that need more detail than the conversation brief.
+CREATE TABLE IF NOT EXISTS message_chunks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    turn_index      INTEGER NOT NULL,
+    summary         TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    UNIQUE (conversation_id, turn_index)
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS message_chunks_fts USING fts5(
+    summary,
+    content='message_chunks', content_rowid='id'
+);
+CREATE TRIGGER IF NOT EXISTS message_chunks_ai AFTER INSERT ON message_chunks BEGIN
+    INSERT INTO message_chunks_fts(rowid, summary) VALUES (new.id, new.summary);
+END;
+CREATE TRIGGER IF NOT EXISTS message_chunks_ad AFTER DELETE ON message_chunks BEGIN
+    INSERT INTO message_chunks_fts(message_chunks_fts, rowid, summary)
+    VALUES ('delete', old.id, old.summary);
+END;
+CREATE TRIGGER IF NOT EXISTS message_chunks_au AFTER UPDATE ON message_chunks BEGIN
+    INSERT INTO message_chunks_fts(message_chunks_fts, rowid, summary)
+    VALUES ('delete', old.id, old.summary);
+    INSERT INTO message_chunks_fts(rowid, summary) VALUES (new.id, new.summary);
+END;
+
 -- Full-text search over title + summary (keyword search, high precision).
 -- Kept in sync with conversations by the three triggers below (insert/delete/update).
 CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(

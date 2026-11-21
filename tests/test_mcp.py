@@ -11,7 +11,13 @@ import pytest
 
 from akashic_codex import db
 from akashic_codex.ingest import save_conversation
-from akashic_codex.mcp_server import get_conversation, search_memory
+from akashic_codex.mcp_server import (
+    get_context,
+    get_conversation,
+    get_message,
+    search_memory,
+    search_messages,
+)
 
 DUMMY_CONVERSATIONS = [
     {
@@ -70,3 +76,13 @@ def test_get_conversation_returns_full_record(mcp_store):
 def test_get_conversation_missing_id_raises(mcp_store):
     with pytest.raises(ValueError):
         get_conversation(999)
+
+
+def test_context_and_message_tools_return_turn_details(mcp_store):
+    context = get_context(1, recent_turns=1)
+    assert context["conversation_id"] == 1
+    assert context["recent_turns"]
+    matches = search_messages("SQLite Postgres")
+    assert matches
+    message = get_message(matches[0]["id"])
+    assert message["content"]
