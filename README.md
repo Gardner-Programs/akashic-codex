@@ -39,6 +39,15 @@ python -m akashic_codex.cli search "what database did we pick for local storage"
 python -m akashic_codex.cli show 1
 ```
 
+### Titles
+
+Conversations saved without a title get one generated from their summary.
+`AKASHIC_TITLER` picks the backend: `heuristic` (default, offline) or
+`ollama:<model>` for a local model. If Ollama is down the save still succeeds
+with a heuristic title. To regenerate titles later (after an outage, or after
+switching models), run `retitle` (only "Untitled" rows) or `retitle --all`.
+Like `reembed`, it writes a backup first.
+
 ### Switching embedding models
 
 Every vector in a store must come from one model, so saves and searches refuse to
@@ -154,7 +163,7 @@ Active development. Roadmap steps 1-9 are built and tested.
 - [x] Embeddings + semantic vector search (`sqlite-vec`)
 - [x] Hybrid search (reciprocal rank fusion)
 - [x] Ingest pipeline (`save_conversation`: summarize, tag, embed, store)
-- [x] CLI (`init` / `save` / `search` / `show` / `reembed` / `serve_api` / `serve_mcp`)
+- [x] CLI (`init` / `save` / `search` / `show` / `reembed` / `retitle` / `serve_api` / `serve_mcp`)
 - [x] REST API (FastAPI: save / search / show)
 - [x] MCP server (expose `search_memory` / `get_conversation` as tools)
 - [x] Auto-save (Claude Code `Stop` hook: upsert-by-session, platform adapter seam)
@@ -172,6 +181,7 @@ src/akashic_codex/
   embeddings.py            single fixed embedding model
   ingest.py                save pipeline: summarize, tag, embed, store
   search.py                two-tier hybrid retrieval
+  titlers.py               title backends (heuristic / Ollama) + retitle
   reembed.py               atomic rebuild of every vector on the active model
   adapters.py              per-platform transcript adapters (Claude Code today; more via #21)
   cli.py                   command-line entry point (init/save/search/show/reembed/serve_api/serve_mcp/claude-hook)

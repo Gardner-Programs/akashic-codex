@@ -109,3 +109,9 @@ def test_cli_reembed_aborts_without_confirmation(cli_db, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _prompt: "n")
     run(monkeypatch, "reembed")
     assert "Aborted" in capsys.readouterr().out
+
+
+def test_cli_retitle_with_yes(cli_db, monkeypatch, capsys):
+    run(monkeypatch, "init")
+    run(monkeypatch, "retitle", "--yes")
+    assert "Retitled 0 of 0 conversations" in capsys.readouterr().out
