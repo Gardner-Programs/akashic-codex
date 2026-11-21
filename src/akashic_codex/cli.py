@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -67,6 +68,10 @@ def cmd_claude_hook(args):
     session_id = data["session_id"]
     transcript_path = data["transcript_path"]
     full_log = claude_transcript_to_log(transcript_path)
+    min_chars = int(os.environ.get("AKASHIC_MIN_SESSION_CHARS", "200"))
+    if len(full_log.strip()) < min_chars:
+        print("Session below minimum length; skipped")
+        return
     conn = db.connect()
     from akashic_codex.summarizers import SUMMARIZER, _extractive, summarize
 
