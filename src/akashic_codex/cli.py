@@ -10,6 +10,7 @@ Usage:
     python -m akashic_codex.cli claude-hook   (Claude Code Stop hook; reads stdin JSON)
     python -m akashic_codex.cli reembed [--yes]
     python -m akashic_codex.cli retitle [--all] [--yes]
+    python -m akashic_codex.cli resummarize [--empty|--all] [--yes]
 """
 
 import argparse
@@ -67,7 +68,26 @@ def cmd_claude_hook(args):
     transcript_path = data["transcript_path"]
     full_log = claude_transcript_to_log(transcript_path)
     conn = db.connect()
-    save_session(conn, session_id, full_log, source="claude-code")
+    from akashic_codex.summarizers import SUMMARIZER, _extractive, summarize
+
+    try:
+        summary = summarize(full_log)
+        if not summary or not summary.strip():
+            raise RuntimeError("summarizer returned an empty summary")
+        summarizer = SUMMARIZER
+    except Exception as error:
+        # A local generation outage must not discard the raw transcript from a
+        # Stop hook. Preserve it with the offline extractive summary instead.
+        print(f"Summarizer failed; saved with extractive fallback: {error}", file=sys.stderr)
+        summary, summarizer = _extractive(full_log), "extractive"
+    save_session(
+        conn,
+        session_id,
+        full_log,
+        source="claude-code",
+        summary_override=summary,
+        summarizer_override=summarizer,
+    )
 
 
 def cmd_reembed(args):
@@ -104,6 +124,23 @@ def cmd_retitle(args):
     result = retitle_store(conn, all_rows=args.all)
     print(f"Backup written to {result['backup']}")
     print(f"Retitled {result['count']} of {result['scanned']} conversations")
+
+
+def cmd_resummarize(args):
+    """Regenerate selected summaries and their vectors, after confirming."""
+    from akashic_codex.resummarize import plan_resummarize, resummarize_store
+
+    conn = db.connect()
+    plan = plan_resummarize(conn, empty_only=not args.all)
+    scope = "empty summaries" if not args.all else "every conversation"
+    print(f"Resummarize {scope} ({plan['count']} rows) with {plan['summarizer']}.")
+    print("A backup of the database is written first; changed summaries are re-embedded.")
+    if not args.yes and input("Proceed? [y/N] ").strip().lower() != "y":
+        print("Aborted")
+        return
+    result = resummarize_store(conn, empty_only=not args.all)
+    print(f"Backup written to {result['backup']}")
+    print(f"Resummarized {result['count']} conversations")
 
 
 def cmd_show(args):
@@ -156,6 +193,13 @@ def main() -> None:
     p_retitle.add_argument("--all", action="store_true", help="retitle every conversation")
     p_retitle.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     p_retitle.set_defaults(func=cmd_retitle)
+
+    p_resummarize = sub.add_parser("resummarize", help="regenerate summaries")
+    scope = p_resummarize.add_mutually_exclusive_group()
+    scope.add_argument("--empty", action="store_true", help="regenerate empty summaries (default)")
+    scope.add_argument("--all", action="store_true", help="regenerate every summary")
+    p_resummarize.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    p_resummarize.set_defaults(func=cmd_resummarize)
 
     p_search = sub.add_parser("search", help="search stored conversations")
     p_search.add_argument("query")

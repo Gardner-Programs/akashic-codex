@@ -113,7 +113,16 @@ def save_conversation(
     return conv_id
 
 
-def save_session(conn, session_id, full_log, title=None, source=None, thread_id=None) -> int:
+def save_session(
+    conn,
+    session_id,
+    full_log,
+    title=None,
+    source=None,
+    thread_id=None,
+    summary_override=None,
+    summarizer_override=None,
+) -> int:
     """Store or update a session's conversation end to end and return its id.
 
     The session-keyed sibling of save_conversation, used by the auto-save path:
@@ -145,7 +154,7 @@ def save_session(conn, session_id, full_log, title=None, source=None, thread_id=
     int
         The id of the stored (inserted or updated) conversation.
     """
-    summary = summarize(full_log)
+    summary = summarize(full_log) if summary_override is None else summary_override
     if not title:
         title = make_title(summary)
     tags = suggest_tags(full_log)
@@ -156,7 +165,7 @@ def save_session(conn, session_id, full_log, title=None, source=None, thread_id=
         session_id,
         title,
         full_log,
-        summarizer=SUMMARIZER,
+        summarizer=summarizer_override or SUMMARIZER,
         summary=summary,
         source=source,
         thread_id=thread_id,

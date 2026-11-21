@@ -34,17 +34,19 @@ Shipped since the numbered roadmap:
 
 **Titles + retitle:** `titlers.py` (`AKASHIC_TITLER`: `heuristic` default, `ollama:<model>` with heuristic fallback on failure). `save_conversation`/`save_session` title from the summary when none is given; `cli retitle [--all] [--yes]` backs up then regenerates. The live hook runs with `AKASHIC_TITLER=ollama:gemma4:12b`.
 
+**Resummarize + hook fallback (#33):** `cli resummarize [--empty|--all] [--yes]` backs up the database, regenerates empty summaries by default or every summary with `--all`, and replaces matching vectors. Claude hook summarization errors fall back to the offline extractive backend so the raw transcript is still saved; manual saves remain fail-loud.
+
 80 tests, ruff clean. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
 
 ## Files
 
-`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,reembed,summarizers,adapters,cli,api,mcp_server}.py`, `tests/{test_smoke,test_cli,test_api,test_mcp,test_reembed,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
+`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,reembed,resummarize,summarizers,adapters,cli,api,mcp_server}.py`, `tests/{test_smoke,test_cli,test_api,test_mcp,test_reembed,test_resummarize,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
 
 ## Commands
 
 - Setup: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`, then `cp .env.example .env`.
 - Tests: `pytest -q`. Lint: `ruff check src tests` and `ruff format --check src tests`.
-- CLI: `python -m akashic_codex.cli {init | save <file> --title "..." | search <query> | show <id> | reembed [--yes] | retitle [--all] [--yes] | serve_api | serve_mcp | claude-hook}`. (`claude-hook` reads a Claude Code Stop-hook payload on stdin; not run by hand.)
+- CLI: `python -m akashic_codex.cli {init | save <file> --title "..." | search <query> | show <id> | reembed [--yes] | retitle [--all] [--yes] | resummarize [--empty|--all] [--yes] | serve_api | serve_mcp | claude-hook}`. (`claude-hook` reads a Claude Code Stop-hook payload on stdin; not run by hand.)
 - Config (env vars, see `.env.example`): `AKASHIC_DB_PATH`, `AKASHIC_EMBEDDING_MODEL` (fixed per store), `AKASHIC_SUMMARIZER` (`extractive` | `ollama:<model>`), `AKASHIC_OLLAMA_HOST`.
 
 ## Testing approach
