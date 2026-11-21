@@ -23,7 +23,7 @@ Retrieval is two-tier and hybrid: search ranks lightweight summaries first (keyw
 
 ## Current state
 
-Roadmap steps 1-9 done and tested, plus two quality-of-life features shipped since. Core: storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp` / `claude-hook`), the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`), and the MCP server (FastMCP over stdio, read-only tools `search_memory` and `get_conversation`).
+Roadmap steps 1-9 done and tested, plus two quality-of-life features shipped since. Core: storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp` / `claude-hook`), the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`), and the MCP server (MCPServer over stdio, read-only tools `search_memory` and `get_conversation`).
 
 Shipped since the numbered roadmap:
 - **Embedder identity + search guard (PR #16):** a generic `store_meta(key, value)` table with `db.get_meta`/`set_meta` (upsert via `ON CONFLICT`). `ingest.ensure_embedder_identity` stamps `embedding_model` + `embedding_dim` once at first ingest (dimension taken from the real vector; `db.py` never imports `embeddings`, staying decoupled). `search.assert_active_embedder` raises `RuntimeError` if the active model differs from the stored one, lenient (no-op) when unstamped.
