@@ -149,7 +149,9 @@ Use absolute paths so the client can find the project's virtualenv.
 Save every Claude Code session automatically, with no manual `save` step. A
 `Stop` hook runs after each turn and upserts the conversation by its session id,
 so a session that grows over many turns stays a single row that updates in place
-instead of duplicating. Saved conversations get `source` set to `claude-code`.
+instead of duplicating. The upsert updates by `session_id` first and inserts only
+when that session has no row, so repeated turns do not consume conversation ids.
+Saved conversations get `source` set to `claude-code`.
 
 Add this to your Claude Code settings (`~/.claude/settings.json` for every
 project, or `.claude/settings.json` for one):

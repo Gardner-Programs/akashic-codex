@@ -120,10 +120,11 @@ def upsert_conversation(
     """Insert a conversation, or update the existing row for this session_id.
 
     The auto-save path calls this once per turn with the same session_id as a
-    live session grows, so it must be an upsert (update in place) rather than a
-    duplicate insert. Returns the conversation id either way. Manual saves that
-    have no session go through insert_conversation instead; this function is the
-    session-keyed path.
+    live session grows, so it updates the existing row and inserts only for a
+    new session. This avoids advancing the conversations AUTOINCREMENT
+    sequence on every turn. Returns the conversation id either way. Manual
+    saves that have no session go through insert_conversation instead; this
+    function is the session-keyed path.
 
     Parameters
     ----------
@@ -154,20 +155,20 @@ def upsert_conversation(
     """
     with conn:
         row = conn.execute(
-            """INSERT INTO conversations
-            (session_id, title, full_log, summarizer, summary, source, thread_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(session_id) DO UPDATE SET
-            title = excluded.title,
-            full_log = excluded.full_log,
-            summarizer = excluded.summarizer,
-            summary = excluded.summary,
-            source = excluded.source,
-            thread_id = excluded.thread_id
-            RETURNING id
-            """,
-            (session_id, title, full_log, summarizer, summary, source, thread_id),
+            """UPDATE conversations
+            SET title = ?, full_log = ?, summarizer = ?, summary = ?, source = ?, thread_id = ?
+            WHERE session_id = ?
+            RETURNING id""",
+            (title, full_log, summarizer, summary, source, thread_id, session_id),
         ).fetchone()
+        if row is None:
+            row = conn.execute(
+                """INSERT INTO conversations
+                (session_id, title, full_log, summarizer, summary, source, thread_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                RETURNING id""",
+                (session_id, title, full_log, summarizer, summary, source, thread_id),
+            ).fetchone()
     return row["id"]
 
 

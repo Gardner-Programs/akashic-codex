@@ -259,13 +259,18 @@ def test_save_conversation_records_summarizer_provenance(db_conn):
 
 def test_upsert_conversation_updates_same_session_in_place(db_conn):
     first = upsert_conversation(db_conn, "session-1", "First title", "log turn 1")
-    second = upsert_conversation(db_conn, "session-1", "Second title", "log turn 1 and 2")
+    for turn in range(2, 63):
+        second = upsert_conversation(
+            db_conn, "session-1", "Second title", f"log through turn {turn}"
+        )
     # same session must reuse the one row, not duplicate it
     assert first == second
     rows = db_conn.execute("SELECT id, title, full_log FROM conversations").fetchall()
     assert len(rows) == 1
     assert rows[0]["title"] == "Second title"
-    assert rows[0]["full_log"] == "log turn 1 and 2"
+    assert rows[0]["full_log"] == "log through turn 62"
+    next_id = insert_conversation(db_conn, "Next session", "next log")
+    assert next_id == first + 1
 
 
 def test_upsert_conversation_distinct_sessions_are_separate_rows(db_conn):
