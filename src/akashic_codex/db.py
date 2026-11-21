@@ -182,6 +182,31 @@ def update_session_log(conn: sqlite3.Connection, session_id: str, full_log: str)
     return row["id"] if row else None
 
 
+def find_transcript_overlaps(
+    conn: sqlite3.Connection, session_id: str, full_log: str, min_chars: int = 200
+) -> list[sqlite3.Row]:
+    """Return other conversations whose complete transcript occurs verbatim here."""
+    return conn.execute(
+        """SELECT id, session_id, thread_id, full_log FROM conversations
+        WHERE (session_id IS NULL OR session_id != ?)
+          AND length(trim(full_log)) >= ?
+          AND instr(?, full_log) > 0
+        ORDER BY id""",
+        (session_id, min_chars, full_log),
+    ).fetchall()
+
+
+def assign_thread(conn: sqlite3.Connection, conversation_ids: list[int], thread_id: str) -> None:
+    """Assign the same logical thread to the given conversation rows."""
+    if conversation_ids:
+        placeholders = ",".join("?" for _ in conversation_ids)
+        with conn:
+            conn.execute(
+                f"UPDATE conversations SET thread_id = ? WHERE id IN ({placeholders})",
+                (thread_id, *conversation_ids),
+            )
+
+
 def get_or_create_tag(conn: sqlite3.Connection, name: str) -> int:
     """Return the id of a tag, creating it if it does not exist.
 

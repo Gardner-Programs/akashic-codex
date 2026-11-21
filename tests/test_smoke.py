@@ -355,6 +355,34 @@ def test_save_session_search_reflects_latest_turn(db_conn, mock_embed):
     assert results[0]["id"] == convo_id
 
 
+def test_save_session_links_verbatim_transcript_overlap(db_conn, mock_embed):
+    original_log = "User: Explain the durable storage decision.\nAssistant: " + (
+        "We chose SQLite for local ownership. " * 8
+    )
+    original_id = save_conversation(db_conn, original_log, title="Storage decision")
+    continued_id = save_session(
+        db_conn, "session-next", original_log + "\nUser: Continue from here."
+    )
+
+    rows = db_conn.execute(
+        "SELECT id, thread_id FROM conversations WHERE id IN (?, ?) ORDER BY id",
+        (original_id, continued_id),
+    ).fetchall()
+    assert rows[0]["thread_id"]
+    assert rows[0]["thread_id"] == rows[1]["thread_id"]
+
+
+def test_save_session_ignores_short_verbatim_overlap(db_conn, mock_embed):
+    original_id = save_conversation(db_conn, "Okay.", title="Short exchange")
+    continued_id = save_session(db_conn, "session-short", "Okay. I have a new question.")
+
+    rows = db_conn.execute(
+        "SELECT thread_id FROM conversations WHERE id IN (?, ?)",
+        (original_id, continued_id),
+    ).fetchall()
+    assert [row["thread_id"] for row in rows] == [None, None]
+
+
 def test_claude_transcript_to_log_flattens_and_filters(tmp_path):
     entries = [
         {"type": "queue-operation", "operation": "noise"},  # noise: dropped

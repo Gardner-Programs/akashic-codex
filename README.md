@@ -155,6 +155,12 @@ instead of duplicating. The upsert updates by `session_id` first and inserts onl
 when that session has no row, so repeated turns do not consume conversation ids.
 Saved conversations get `source` set to `claude-code`.
 
+When a new session contains an existing conversation's complete transcript
+verbatim (at least 200 non-whitespace characters), AkashicCodex links the rows
+with a shared `thread_id`. This detects copied or continued context across
+sessions without semantic guesses. Short overlaps are ignored to avoid linking
+on generic replies.
+
 Add this to your Claude Code settings (`~/.claude/settings.json` for every
 project, or `.claude/settings.json` for one):
 
