@@ -487,6 +487,15 @@ def list_summaries(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT id, summary FROM conversations ORDER BY id").fetchall()
 
 
+def list_for_resummarize(conn: sqlite3.Connection, empty_only: bool = True) -> list[sqlite3.Row]:
+    """Return (id, full_log, summary) rows to regenerate, oldest first."""
+    whitespace = "char(9) || char(10) || char(11) || char(12) || char(13) || ' '"
+    where = f"WHERE summary IS NULL OR trim(summary, {whitespace}) = ''" if empty_only else ""
+    return conn.execute(
+        f"SELECT id, full_log, summary FROM conversations {where} ORDER BY id"
+    ).fetchall()
+
+
 def replace_all_vectors(
     conn: sqlite3.Connection,
     vectors: dict[int, list[float]],

@@ -48,6 +48,16 @@ with a heuristic title. To regenerate titles later (after an outage, or after
 switching models), run `retitle` (only "Untitled" rows) or `retitle --all`.
 Like `reembed`, it writes a backup first.
 
+If a summarizer outage leaves summaries empty, regenerate them with the active
+backend. By default only empty summaries are selected; use `--all` to rebuild
+every summary. The command backs up the database first and re-embeds each
+changed summary so keyword and semantic search stay in sync:
+
+```bash
+python -m akashic_codex.cli resummarize --empty
+python -m akashic_codex.cli resummarize --all
+```
+
 ### Switching embedding models
 
 Every vector in a store must come from one model, so saves and searches refuse to
@@ -162,6 +172,10 @@ Notes:
 - The hook starts a fresh process each turn and loads the embedding model on every
   run, so expect a brief pause per turn. That is fine for local single-user use;
   making it cheaper (a resident process, or summarizing less often) is future work.
+- If summarization fails in the hook, it saves the raw transcript with the offline
+  extractive summary and records `extractive` as the summarizer. Manual saves still
+  report summarizer failures. The `resummarize` command can regenerate those rows
+  later with the configured backend.
 
 ## Status
 
@@ -172,7 +186,7 @@ Active development. Roadmap steps 1-9 are built and tested.
 - [x] Embeddings + semantic vector search (`sqlite-vec`)
 - [x] Hybrid search (reciprocal rank fusion)
 - [x] Ingest pipeline (`save_conversation`: summarize, tag, embed, store)
-- [x] CLI (`init` / `save` / `search` / `show` / `reembed` / `retitle` / `serve_api` / `serve_mcp`)
+- [x] CLI (`init` / `save` / `search` / `show` / `reembed` / `retitle` / `resummarize` / `serve_api` / `serve_mcp`)
 - [x] REST API (FastAPI: save / search / show)
 - [x] MCP server (expose `search_memory` / `get_conversation` as tools)
 - [x] Auto-save (Claude Code `Stop` hook: upsert-by-session, platform adapter seam)
@@ -192,8 +206,9 @@ src/akashic_codex/
   search.py                two-tier hybrid retrieval
   titlers.py               title backends (heuristic / Ollama) + retitle
   reembed.py               atomic rebuild of every vector on the active model
+  resummarize.py           regenerate summaries and refresh their vectors
   adapters.py              per-platform transcript adapters (Claude Code today; more via #21)
-  cli.py                   command-line entry point (init/save/search/show/reembed/serve_api/serve_mcp/claude-hook)
+  cli.py                   command-line entry point (init/save/search/show/reembed/retitle/resummarize/serve_api/serve_mcp/claude-hook)
   api.py                   FastAPI REST layer
   mcp_server.py            MCP server layer (read-only tools over stdio)
 tests/                     pytest

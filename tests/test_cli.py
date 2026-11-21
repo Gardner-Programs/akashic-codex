@@ -115,3 +115,53 @@ def test_cli_retitle_with_yes(cli_db, monkeypatch, capsys):
     run(monkeypatch, "init")
     run(monkeypatch, "retitle", "--yes")
     assert "Retitled 0 of 0 conversations" in capsys.readouterr().out
+
+
+def test_cli_resummarize_with_yes(cli_db, monkeypatch, capsys):
+    run(monkeypatch, "init")
+    run(monkeypatch, "resummarize", "--empty", "--yes")
+    out = capsys.readouterr().out
+    assert "Resummarize empty summaries (0 rows)" in out
+    assert "Resummarized 0 conversations" in out
+
+
+def test_cli_resummarize_rejects_conflicting_scope(monkeypatch):
+    with pytest.raises(SystemExit):
+        run(monkeypatch, "resummarize", "--empty", "--all", "--yes")
+
+
+def test_claude_hook_falls_back_when_summarizer_fails(cli_db, monkeypatch, tmp_path):
+    import json
+
+    run(monkeypatch, "init")
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        '{"type":"user","message":{"content":"Remember my SQLite choice."}}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "Remember my SQLite choice.")
+    monkeypatch.setattr(
+        "akashic_codex.summarizers.summarize",
+        lambda _log: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        type(
+            "Input",
+            (),
+            {
+                "read": lambda self: json.dumps(
+                    {"session_id": "s1", "transcript_path": str(transcript)}
+                )
+            },
+        )(),
+    )
+
+    run(monkeypatch, "claude-hook")
+
+    conn = db.connect()
+    row = conn.execute("SELECT full_log, summary, summarizer FROM conversations").fetchone()
+    assert row["full_log"] == "Remember my SQLite choice."
+    assert row["summary"]
+    assert row["summarizer"] == "extractive"

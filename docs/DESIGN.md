@@ -45,6 +45,13 @@ Hybrid ranking combines keyword search (FTS5, high precision, exact terms) with 
 
 Pick ONE embedding model and use it for everything written to and queried against the store. Vectors from different models are not comparable. Use a local model (`all-MiniLM-L6-v2`, 384 dims, via sentence-transformers) to stay vendor-independent. Store the model name so future-you can re-embed if you ever switch. The schema vector dimension must match the model.
 
+Summaries can be regenerated with `cli resummarize [--empty|--all] [--yes]`.
+The default scope repairs missing or whitespace-only summaries; `--all` rebuilds
+the entire summary corpus. The command writes a database backup first and updates
+each corresponding vector with the active embedder. The Claude Code hook uses the
+offline extractive summarizer if its configured backend fails, preserving the raw
+transcript and recording the fallback provenance. Manual saves remain fail-loud.
+
 ## Two AI backends, two different rules
 
 The system uses AI in two places, and they have opposite swap rules. Do not conflate them.
