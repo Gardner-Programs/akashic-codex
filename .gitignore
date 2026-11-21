@@ -13,6 +13,7 @@ data/*.sqlite3
 
 # Environment / secrets
 .env
+! .env.example
 
 # Editor / OS
 .vscode/
