@@ -30,6 +30,10 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+`requirements.txt` keeps direct dependencies within supported major-version
+ranges. CI runs weekly against the newest releases in those ranges so upstream
+changes are exercised before they can break a fresh install.
+
 ### CLI
 
 ```bash
@@ -207,7 +211,9 @@ Active development. Roadmap steps 1-9 are built and tested.
 - [x] Re-embed command (atomic model switch, guarded on both read and write)
 - [ ] Polish (web view or TUI for demos)
 
-CI runs ruff and pytest on every change. See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture and full roadmap.
+CI runs ruff and pytest on every change and weekly against the newest allowed
+dependency versions. See [`docs/DESIGN.md`](docs/DESIGN.md) for the architecture
+and full roadmap.
 
 ## Layout
 
