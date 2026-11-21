@@ -58,6 +58,13 @@ transcript before summarization or database access; skipped sessions can be save
 on a later turn once the cumulative transcript reaches the threshold. Set the
 value to `0` to save every session.
 
+`AKASHIC_SUMMARY_POLICY` defaults to `each_turn`, preserving the original Stop
+hook behavior. Set it to `session_end` and register the hook for both `Stop` and
+`SessionEnd`: Stop upserts the raw `full_log` while preserving the current title,
+summary, and vector, and SessionEnd runs the full derived-data pipeline. The first
+qualifying Stop still creates a searchable row. This reduces repeated generation
+and embedding work while keeping the transcript current throughout the session.
+
 ## Two AI backends, two different rules
 
 The system uses AI in two places, and they have opposite swap rules. Do not conflate them.

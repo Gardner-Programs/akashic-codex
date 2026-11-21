@@ -36,6 +36,8 @@ Shipped since the numbered roadmap:
 
 **Resummarize + hook fallback (#33):** `cli resummarize [--empty|--all] [--yes]` backs up the database, regenerates empty summaries by default or every summary with `--all`, and replaces matching vectors. Claude hook summarization errors fall back to the offline extractive backend so the raw transcript is still saved; manual saves remain fail-loud.
 
+**Auto-save summary policy (#34):** `AKASHIC_SUMMARY_POLICY` defaults to `each_turn`. `session_end` updates only the raw transcript on later Stop events, preserving its summary, title, and vector; SessionEnd refreshes derived data. The first qualifying Stop creates the searchable row.
+
 80 tests, ruff clean. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
 
 ## Files
@@ -64,7 +66,6 @@ A `mock_embed` fixture in `conftest.py` patches `embed` at its usage sites (`ing
 **#19 auto-save is DONE** (built this session; see the auto-save bullet under Current state). The store now captures live Claude Code sessions automatically. Follow-ups that fell out of the work:
 
 - **Thread linking (verbatim first):** `thread_id` exists on the row but nothing sets it. This is the cross-model continuity goal (run out of usage on Claude, continue on Gemini, come back to Claude with no gap). Agreed design: when a new session's transcript *contains* an existing conversation's text, auto-link them under one `thread_id`. Do **verbatim** overlap detection first (strong textual proof, safe to auto-link silently); leave semantic/suggested linking as a later, lower-confidence tier. Its own issue; do not fold into the core.
-- **Summarizer toggle for auto-save:** the `Stop` hook re-summarizes every turn. Cheap for the default extractive, heavy for Ollama. Add an `each_turn` vs `session_end` policy where the raw `full_log` still upserts every turn but the summary recompute is gated.
 - **#25 schema versioning + migrations** (filed this session): `init` cannot alter an existing table; needed before real data accumulates.
 
 **Existing backlog:** #20 structured messages (per-turn role + model), #21 import adapters (Gemini/ChatGPT, siblings to the new Claude adapter in `adapters.py`), #23 summarizer follow-ups (extractive fragments on structured/dialogue text; Ollama needs a soft length cap).
