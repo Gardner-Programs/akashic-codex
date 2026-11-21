@@ -15,7 +15,7 @@ uvicorn
 
 # MCP server layer: exposes the store's read tools to MCP-capable clients.
 # Bundles FastMCP (the decorator-based server) and the stdio transport.
-mcp
+mcp>=1.28,<2  # 2.x renamed FastMCP to MCPServer; migrate before lifting the cap
 
 # Dev / testing
 pytest
