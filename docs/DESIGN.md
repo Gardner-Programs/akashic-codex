@@ -134,4 +134,12 @@ Structured messages instead of an opaque `full_log` blob: a `messages` table (co
 
 The current implementation parses conventional `User:`, `Assistant:`, `System:`, and `Tool:` transcript lines during ingest. Optional model attribution uses `Assistant [model=name]: ...`; continuation lines remain part of the preceding turn. Session upserts replace the derived rows, and transcript-only hook updates refresh them alongside `full_log`. Unrecognized leading lines are omitted because their role cannot be inferred. The raw `full_log` remains authoritative.
 
+The `import claude|gemini|chatgpt <file>` CLI command batch-imports provider
+JSON exports. Adapters normalize provider turns to the role-prefixed transcript
+format before using the same ingest pipeline, preserving titles and available
+per-turn model labels. Claude account exports use `chat_messages`; Gemini JSON
+uses conversation/message arrays; ChatGPT exports use the `mapping` tree in
+`conversations.json`. Unsupported provider-specific payload blocks are omitted
+when they do not contain plain text. Imported messages remain derived data.
+
 Re-embedding command for switching embedding models: re-embed every summary with the new model in one shot, replace all vectors, update the stored model name, and (if dimensions change) drop and recreate the vector table. All-or-nothing; never mix two models' vectors. Prerequisite (step zero of this feature): the store must record its own embedder identity (model name + dimension), which it does not yet. Add a small `store_meta` table for this, written via generic `db.get_meta`/`set_meta` helpers so `db.py` stays decoupled from the embeddings layer. This is what lets search verify the active embedder matches the stored vectors and refuse to silently mix maps, and what gives the re-embed command an old model to migrate from. Add it before any store you care about exists; backfilling identity onto existing vectors means assuming the model they were built with. This is what makes the embedder "drag-and-drop" swappable for the user while staying internally consistent. If a paid backend (embedder or summarizer) is configured, estimate and surface token/cost before running so the user opts in knowingly; local backends report zero. Import adapters for Claude/Gemini/ChatGPT export formats. Encryption at rest. A "related conversations" link graph.

@@ -44,6 +44,45 @@ def test_cli_save(cli_db, tmp_path, monkeypatch, capsys):
     assert "Conversation saved ID:" in capsys.readouterr().out
 
 
+def test_cli_import_batches_conversations_and_structures_messages(
+    cli_db, tmp_path, monkeypatch, capsys
+):
+    import json
+
+    run(monkeypatch, "init")
+    export = tmp_path / "conversations.json"
+    export.write_text(
+        json.dumps(
+            [
+                {
+                    "title": "Imported chat",
+                    "chat_messages": [
+                        {"sender": "human", "text": "Remember SQLite"},
+                        {"sender": "assistant", "text": "I will", "model": "claude-sonnet"},
+                    ],
+                },
+                {"title": "Empty", "chat_messages": []},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    run(monkeypatch, "import", "claude", str(export))
+
+    assert "Imported 1 conversations" in capsys.readouterr().out
+    conn = db.connect()
+    row = conn.execute("SELECT title, source, full_log FROM conversations").fetchone()
+    messages = conn.execute(
+        "SELECT role, content, model FROM messages ORDER BY turn_index"
+    ).fetchall()
+    assert row["title"] == "Imported chat"
+    assert row["source"] == "claude"
+    assert [tuple(message) for message in messages] == [
+        ("user", "Remember SQLite", None),
+        ("assistant", "I will", "claude-sonnet"),
+    ]
+
+
 def test_cli_search(cli_db, monkeypatch, capsys):
     run(monkeypatch, "init")
     run(monkeypatch, "search", "1")

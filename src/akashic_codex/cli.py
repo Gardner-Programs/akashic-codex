@@ -20,7 +20,12 @@ import sys
 from pathlib import Path
 
 from akashic_codex import db
-from akashic_codex.adapters import claude_transcript_to_log
+from akashic_codex.adapters import (
+    chatgpt_export,
+    claude_export,
+    claude_transcript_to_log,
+    gemini_export,
+)
 from akashic_codex.ingest import save_conversation, save_session
 from akashic_codex.messages import parse_messages
 from akashic_codex.search import search
@@ -54,6 +59,26 @@ def cmd_save(args):
     source = args.source
     conv_id = save_conversation(conn, full_log, title, source)
     print(f"Conversation saved ID: {conv_id}")
+
+
+def cmd_import(args):
+    """Import every conversation in a provider export file."""
+    parsers = {"claude": claude_export, "gemini": gemini_export, "chatgpt": chatgpt_export}
+    conversations = parsers[args.format](args.file)
+    conn = db.connect()
+    imported = 0
+    for conversation in conversations:
+        full_log = conversation["full_log"]
+        if not full_log or not full_log.strip():
+            continue
+        save_conversation(
+            conn,
+            full_log,
+            title=conversation.get("title"),
+            source=args.format,
+        )
+        imported += 1
+    print(f"Imported {imported} conversations")
 
 
 def cmd_claude_hook(args):
@@ -196,6 +221,11 @@ def main() -> None:
     p_save.add_argument("--title")
     p_save.add_argument("--source")
     p_save.set_defaults(func=cmd_save)
+
+    p_import = sub.add_parser("import", help="batch import a Claude, Gemini, or ChatGPT export")
+    p_import.add_argument("format", choices=("claude", "gemini", "chatgpt"))
+    p_import.add_argument("file", help="provider export JSON file")
+    p_import.set_defaults(func=cmd_import)
 
     p_hook = sub.add_parser(
         "claude-hook", help="auto-save from a Claude Code Stop hook (reads JSON on stdin)"
