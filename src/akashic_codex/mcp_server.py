@@ -13,12 +13,12 @@ Launch (normally done by the MCP client, not by hand):
     python -m akashic_codex.mcp_server
 """
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from akashic_codex import db
 from akashic_codex.search import search
 
-mcp = FastMCP("AkashicCodex")
+mcp = MCPServer("AkashicCodex")
 
 
 @mcp.tool()
