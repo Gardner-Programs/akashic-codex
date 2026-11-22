@@ -11,7 +11,12 @@ import pytest
 
 from akashic_codex import db
 from akashic_codex.ingest import save_conversation
-from akashic_codex.mcp_server import get_conversation, search_memory
+from akashic_codex.mcp_server import (
+    get_conversation,
+    get_conversation_context,
+    get_message,
+    search_memory,
+)
 
 DUMMY_CONVERSATIONS = [
     {
@@ -70,3 +75,24 @@ def test_get_conversation_returns_full_record(mcp_store):
 def test_get_conversation_missing_id_raises(mcp_store):
     with pytest.raises(ValueError):
         get_conversation(999)
+
+
+def test_context_and_message_tools_retrieve_turn_by_id(mcp_store, monkeypatch):
+    monkeypatch.setattr(
+        "akashic_codex.ingest.summarize", lambda _text: "A conversation about a marker."
+    )
+    conn = db.connect(mcp_store)
+    conv_id = save_conversation(
+        conn,
+        "User: Secret marker indigo-raven-418.\n"
+        "Assistant: The marker is indigo-raven-418.\n"
+        "User: Later question about formatting.\n"
+        "Assistant: Use short paragraphs.",
+        "Marker",
+    )
+    conn.close()
+
+    context = get_conversation_context(conv_id, recent_turns=2)
+    assert "indigo-raven-418" not in context["brief"]
+    message = get_message(context["older_chunk_ids"][0])
+    assert "indigo-raven-418" in message["content"]

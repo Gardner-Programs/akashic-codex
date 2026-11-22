@@ -30,6 +30,7 @@ The model does generation only. The service owns storage, summarization-at-inges
 
 `conversations` (id, title, summary, source, created_at, full_log)
 `messages` (conversation_id, turn_index, role, content, model), derived at ingest
+`message_chunks` (id, conversation_id, turn_index, summary, content), also derived at ingest
 `tags` (id, name) and `conversation_tags` (many-to-many)
 `conversations_fts` (FTS5 over title + summary) for keyword search
 `summary_vectors` (vec0, embedding of the summary) for semantic search
@@ -137,7 +138,14 @@ the existing JSON API, ships as package data, and adds no frontend dependencies.
 
 Structured messages instead of an opaque `full_log` blob: a `messages` table (conversation_id, turn_index, role, content, model) so a conversation is a sequence of turns rather than one text document. Motivation is twofold. First, per-turn model attribution: the current conversation-level `source` cannot record that turn 1 was Claude and turn 3 was Gemini, but the project's goal is to let users swap models mid-conversation, so model belongs on the message, not the conversation. Second, context re-injection: the store exists to feed memory back into live conversations once they exceed a model's context window. Summaries are the compact fallback, but ideally you pass back whatever full context a given section needs, and structured turns let you select and re-inject precise spans rather than whole blobs. Keep `full_log` as the source of truth regardless: structure can be derived from the raw log, but a lost raw log cannot be recovered from structure. Deferred; search does not benefit (retrieval stays conversation-level) and nothing in the current roadmap needs it. Natural trigger: the import adapters (which already parse exports into turns) or a render/chat UI.
 
-The current implementation parses conventional `User:`, `Assistant:`, `System:`, and `Tool:` transcript lines during ingest. Optional model attribution uses `Assistant [model=name]: ...`; continuation lines remain part of the preceding turn. Session upserts replace the derived rows, and transcript-only hook updates refresh them alongside `full_log`. Unrecognized leading lines are omitted because their role cannot be inferred. The raw `full_log` remains authoritative.
+The current implementation parses conventional `User:`, `Assistant:`, `System:`, and `Tool:` transcript lines during ingest. Optional model attribution uses `Assistant [model=name]: ...`; continuation lines remain part of the preceding turn. Session upserts replace the derived rows, and transcript-only hook updates refresh them alongside `full_log`. Unrecognized leading lines are omitted because their role cannot be inferred. The raw `full_log` remains authoritative. Each parsed turn has an ingest-time local summary and stable chunk id. Context construction returns the conversation summary, older turn summaries with ids, and the most recent N turns in full; clients can fetch an older turn by id when its summary is insufficient.
+
+The context builder is available through REST and MCP. It returns a short
+conversation brief, older-turn summaries with `older_chunk_ids` for exact
+retrieval, and a configurable window of full recent turns with role and model
+labels. Agents can use this as working memory and fetch a specific older chunk
+by id when they need exact wording. Per-turn summaries are generated during
+ingest with the configured summarizer, so retrieval does not call a model.
 
 The `import claude|gemini|chatgpt <file>` CLI command batch-imports provider
 JSON exports. Adapters normalize provider turns to the role-prefixed transcript

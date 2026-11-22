@@ -110,7 +110,14 @@ def cmd_claude_hook(args):
         and event != "SessionEnd"
         and (conversation_id := db.update_session_log(conn, session_id, full_log)) is not None
     ):
-        db.replace_messages(conn, conversation_id, parse_messages(full_log))
+        messages = parse_messages(full_log)
+        db.replace_messages(conn, conversation_id, messages)
+        from akashic_codex.summarizers import _extractive
+
+        chunks = [
+            {**message, "summary": _extractive(message["content"] or "")} for message in messages
+        ]
+        db.replace_message_chunks(conn, conversation_id, chunks)
         return
     from akashic_codex.summarizers import SUMMARIZER, _extractive, summarize
 

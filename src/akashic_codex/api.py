@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from akashic_codex import db
+from akashic_codex.context import build_context
 from akashic_codex.ingest import save_conversation
 from akashic_codex.search import search
 
@@ -123,3 +124,25 @@ def get_conversation_endpoint(conv_id: int, conn: sqlite3.Connection = Depends(g
     if row is None:
         raise HTTPException(status_code=404, detail=f"No conversation with id {conv_id}")
     return Conversation(**dict(row))
+
+
+@app.get("/messages/{message_id}")
+def get_message_endpoint(message_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    """Return one full turn chunk by id."""
+    row = db.get_message_chunk(conn, message_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No message with id {message_id}")
+    return dict(row)
+
+
+@app.get("/conversations/{conv_id}/context")
+def conversation_context_endpoint(
+    conv_id: int,
+    recent_turns: int = Query(default=6, ge=0, le=100),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """Build a compact brief plus a bounded window of full recent turns."""
+    result = build_context(conn, conv_id, recent_turns)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"No conversation with id {conv_id}")
+    return result

@@ -187,12 +187,51 @@ def replace_messages(conn: sqlite3.Connection, conversation_id: int, messages: l
 
 
 def get_messages(conn: sqlite3.Connection, conversation_id: int) -> list[sqlite3.Row]:
-    """Return structured turns in transcript order."""
+    """Return structured turns in order."""
     return conn.execute(
-        "SELECT turn_index, role, content, model FROM messages "
-        "WHERE conversation_id = ? ORDER BY turn_index",
+        """SELECT turn_index, role, content, model FROM messages
+           WHERE conversation_id = ? ORDER BY turn_index""",
         (conversation_id,),
     ).fetchall()
+
+
+def get_messages_with_chunks(conn: sqlite3.Connection, conversation_id: int) -> list[sqlite3.Row]:
+    """Return structured turns with their retrievable chunk summaries in order."""
+    return conn.execute(
+        """SELECT messages.turn_index, messages.role, messages.content, messages.model,
+                  message_chunks.id AS chunk_id, message_chunks.summary AS chunk_summary
+           FROM messages
+           LEFT JOIN message_chunks
+             ON message_chunks.conversation_id = messages.conversation_id
+            AND message_chunks.turn_index = messages.turn_index
+           WHERE messages.conversation_id = ?
+           ORDER BY messages.turn_index""",
+        (conversation_id,),
+    ).fetchall()
+
+
+def replace_message_chunks(
+    conn: sqlite3.Connection, conversation_id: int, messages: list[dict]
+) -> None:
+    """Replace per-turn text and summaries derived from the canonical transcript."""
+    with conn:
+        conn.execute("DELETE FROM message_chunks WHERE conversation_id = ?", (conversation_id,))
+        conn.executemany(
+            "INSERT INTO message_chunks (conversation_id, turn_index, summary, content) "
+            "VALUES (?, ?, ?, ?)",
+            [
+                (conversation_id, i, row["summary"], row["content"])
+                for i, row in enumerate(messages)
+            ],
+        )
+
+
+def get_message_chunk(conn: sqlite3.Connection, message_id: int) -> sqlite3.Row | None:
+    """Return one full message chunk by its stable database id."""
+    return conn.execute(
+        "SELECT id, conversation_id, turn_index, summary, content FROM message_chunks WHERE id = ?",
+        (message_id,),
+    ).fetchone()
 
 
 def update_session_log(conn: sqlite3.Connection, session_id: str, full_log: str) -> int | None:

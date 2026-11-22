@@ -9,7 +9,7 @@
       body { max-width: 900px; margin: 3rem auto; padding: 0 1rem; }
       h1 { margin-bottom: .2rem; }
       p { color: color-mix(in srgb, currentColor 65%, transparent); }
-      form { display: flex; gap: .5rem; margin: 2rem 0; }
+      form { display: flex; gap: .5rem; margin: 2rem 0 1rem; }
       input { flex: 1; padding: .7rem; font: inherit; }
       button { padding: .6rem .9rem; font: inherit; cursor: pointer; }
       article { border-top: 1px solid #8886; padding: 1rem 0; }
@@ -20,6 +20,7 @@
       pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; background: #8882;
         border-radius: .5rem; }
       #status { min-height: 1.5em; }
+      #conversation { border-top: 1px solid #8886; margin-top: 2rem; padding-top: 1rem; }
     </style>
   </head>
   <body>
@@ -29,79 +30,81 @@
       <input id="query" type="search" placeholder="Search conversations"
         aria-label="Search conversations">
       <button>Search</button>
-      <button type="button" id="clear">Browse all</button>
     </form>
-    <p id="status" aria-live="polite"></p>
-    <section id="results"></section>
+    <button id="browse" type="button">Browse all</button>
+    <p id="status" role="status"></p>
+    <section id="results" aria-label="Conversations"></section>
+    <section id="conversation" hidden>
+      <h2 id="conversation-title"></h2>
+      <p id="conversation-meta" class="meta"></p>
+      <pre id="transcript"></pre>
+    </section>
     <script>
-      const results = document.querySelector('#results');
-      const status = document.querySelector('#status');
-      const query = document.querySelector('#query');
+      const results = document.querySelector("#results");
+      const status = document.querySelector("#status");
+      const conversation = document.querySelector("#conversation");
 
-      function node(tag, text, className) {
-        const element = document.createElement(tag);
-        element.textContent = text;
-        if (className) element.className = className;
-        return element;
+      function showResults(rows) {
+        results.replaceChildren();
+        conversation.hidden = true;
+        status.textContent = rows.length ? `${rows.length} conversation(s)` : "No conversations found.";
+        for (const row of rows) {
+          const article = document.createElement("article");
+          const open = document.createElement("button");
+          const title = document.createElement("h2");
+          const meta = document.createElement("p");
+          const summary = document.createElement("p");
+          open.type = "button";
+          title.textContent = row.title;
+          meta.className = "meta";
+          meta.textContent = [row.source, row.created_at].filter(Boolean).join(" · ");
+          summary.className = "summary";
+          summary.textContent = row.summary || "";
+          open.append(title);
+          open.addEventListener("click", () => openConversation(row.id));
+          article.append(open, meta, summary);
+          results.append(article);
+        }
       }
 
-      async function load(url) {
-        status.textContent = 'Loading…';
-        results.replaceChildren();
+      async function loadRows(url) {
+        status.textContent = "Loading…";
         try {
           const response = await fetch(url);
-          if (!response.ok) throw Error('Request failed');
-          const rows = await response.json();
-          status.textContent = rows.length
-            ? `${rows.length} conversation${rows.length === 1 ? '' : 's'}`
-            : 'No conversations found';
-          for (const row of rows) {
-            const article = document.createElement('article');
-            const open = document.createElement('button');
-            open.append(node('h2', row.title || `Conversation ${row.id}`));
-            open.addEventListener('click', () => show(row.id));
-            article.append(
-              open,
-              node('div', `#${row.id} · ${row.source || 'unknown source'} · ${row.created_at}`, 'meta'),
-              node('p', row.summary || 'No summary', 'summary'),
-            );
-            results.append(article);
-          }
-        } catch (_error) {
-          status.textContent = 'Could not load conversations.';
+          if (!response.ok) throw new Error(`Request failed (${response.status})`);
+          showResults(await response.json());
+        } catch (error) {
+          status.textContent = error.message;
         }
       }
 
-      async function show(id) {
-        status.textContent = 'Loading conversation…';
+      async function openConversation(id) {
+        status.textContent = "Loading conversation…";
         try {
           const response = await fetch(`/conversations/${id}`);
-          if (!response.ok) throw Error('Request failed');
+          if (!response.ok) throw new Error(`Request failed (${response.status})`);
           const row = await response.json();
-          const article = document.createElement('article');
-          article.append(
-            node('h2', row.title || `Conversation ${row.id}`),
-            node('div', `#${row.id} · ${row.source || 'unknown source'} · ${row.created_at}`, 'meta'),
-            node('p', row.summary || 'No summary', 'summary'),
-            node('pre', row.full_log),
-          );
-          results.replaceChildren(article);
-          status.textContent = 'Conversation details';
-        } catch (_error) {
-          status.textContent = 'Could not load conversation.';
+          document.querySelector("#conversation-title").textContent = row.title;
+          document.querySelector("#conversation-meta").textContent =
+            `${row.source || "unknown source"} · ${row.created_at}`;
+          document.querySelector("#transcript").textContent = row.full_log;
+          conversation.hidden = false;
+          status.textContent = "";
+        } catch (error) {
+          status.textContent = error.message;
         }
       }
 
-      document.querySelector('#search').addEventListener('submit', (event) => {
+      document.querySelector("#browse").addEventListener("click", () => {
+        loadRows("/conversations?limit=100");
+      });
+      document.querySelector("#search").addEventListener("submit", event => {
         event.preventDefault();
-        const value = query.value.trim();
-        load(value ? `/search?query=${encodeURIComponent(value)}&limit=20` : '/conversations');
+        const query = document.querySelector("#query").value.trim();
+        if (query) loadRows(`/search?query=${encodeURIComponent(query)}&limit=100`);
       });
-      document.querySelector('#clear').addEventListener('click', () => {
-        query.value = '';
-        load('/conversations');
-      });
-      load('/conversations');
+
+      loadRows("/conversations");
     </script>
   </body>
 </html>

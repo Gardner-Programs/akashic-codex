@@ -47,7 +47,9 @@ def client(tmp_path, monkeypatch, mock_embed):
     """A TestClient wired to a fresh temp database via a dependency override."""
     db_path = str(tmp_path / "api.db")
     db.init_db(db_path)  # create the schema in the throwaway db
-    monkeypatch.setattr("akashic_codex.ingest.summarize", lambda full_log: full_log[:100])
+    monkeypatch.setattr(
+        "akashic_codex.ingest.summarize", lambda _full_log: "A conversation about its topic."
+    )
 
     def override_get_conn():
         # Same shape as the real get_conn, but pinned to the temp db.
@@ -116,6 +118,26 @@ def test_store_ui_is_served(client):
 def test_get_missing_conversation_returns_404(client):
     r = client.get("/conversations/999")
     assert r.status_code == 404
+
+
+def test_context_and_message_endpoints_retrieve_older_turn(client):
+    transcript = "\n".join(
+        [
+            "User: Keep recovery-code violet-fox-918 confidential.",
+            "Assistant: I will remember violet-fox-918.",
+            "User: What style should the report use?",
+            "Assistant: Use concise paragraphs.",
+        ]
+    )
+    client.post("/conversations", json={"full_log": transcript, "title": "Report"})
+
+    context = client.get("/conversations/1/context", params={"recent_turns": 2}).json()
+    assert len(context["recent_turns"]) == 2
+    assert "violet-fox-918" not in context["brief"]
+    older_id = context["older_chunk_ids"][0]
+    message = client.get(f"/messages/{older_id}")
+    assert message.status_code == 200
+    assert "violet-fox-918" in message.json()["content"]
 
 
 def test_post_without_full_log_returns_422(client):

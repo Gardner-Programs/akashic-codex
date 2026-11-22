@@ -41,13 +41,23 @@ CREATE TABLE IF NOT EXISTS messages (
     PRIMARY KEY (conversation_id, turn_index)
 );
 
+-- Per-turn summaries are derived from messages; full_log remains authoritative.
+CREATE TABLE IF NOT EXISTS message_chunks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    turn_index      INTEGER NOT NULL,
+    summary         TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    UNIQUE (conversation_id, turn_index)
+);
+
 -- Full-text search over title + summary (keyword search, high precision).
 -- Kept in sync with conversations by the three triggers below (insert/delete/update).
 CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(
     title,
     summary,
-    content='conversations',
-    content_rowid='id'
+    content = 'conversations',
+    content_rowid = 'id'
 );
 
 CREATE TRIGGER IF NOT EXISTS conversations_ai

@@ -7,8 +7,8 @@ keep this to a single simple step (paste, file drop, or batch export).
 
 import re
 import sqlite3
-import uuid
 from collections import Counter
+from uuid import uuid4
 
 from akashic_codex import db
 from akashic_codex.embeddings import MODEL_NAME, embed
@@ -198,6 +198,16 @@ def ensure_embedder_identity(conn: sqlite3.Connection, vector: list[float]) -> N
         )
 
 
+def _summarize_chunks(full_log: str) -> list[dict]:
+    """Summarize each parsed turn using the configured local summarizer."""
+    chunks = parse_messages(full_log)
+    for chunk in chunks:
+        text = chunk["content"] or ""
+        chunk["content"] = text
+        chunk["summary"] = summarize(text)
+    return chunks
+
+
 def save_conversation(
     conn: sqlite3.Connection, full_log: str, title: str | None = None, source: str | None = None
 ) -> int:
@@ -234,7 +244,9 @@ def save_conversation(
     conv_id = db.insert_conversation(
         conn, title, full_log, summarizer=SUMMARIZER, summary=summary, source=source
     )
-    db.replace_messages(conn, conv_id, parse_messages(full_log))
+    messages = parse_messages(full_log)
+    db.replace_messages(conn, conv_id, messages)
+    db.replace_message_chunks(conn, conv_id, _summarize_chunks(full_log))
     for tag in tags:
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)
@@ -305,7 +317,7 @@ def save_session(
             )
         )
     if related_ids:
-        thread_id = sorted(related_thread_ids)[0] if related_thread_ids else str(uuid.uuid4())
+        thread_id = sorted(related_thread_ids)[0] if related_thread_ids else str(uuid4())
         db.assign_thread(conn, list(set(related_ids)), thread_id)
     elif current and current["thread_id"]:
         thread_id = current["thread_id"]
@@ -326,7 +338,9 @@ def save_session(
         source=source,
         thread_id=thread_id,
     )
-    db.replace_messages(conn, conv_id, parse_messages(full_log))
+    messages = parse_messages(full_log)
+    db.replace_messages(conn, conv_id, messages)
+    db.replace_message_chunks(conn, conv_id, _summarize_chunks(full_log))
     for tag in tags:
         tag_id = db.get_or_create_tag(conn, tag)
         db.link_conversation_tag(conn, conv_id, tag_id)
