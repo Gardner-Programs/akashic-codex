@@ -13,6 +13,14 @@ def fake_embed(text: str) -> list[float]:
 
 
 @pytest.fixture
+def mock_embed(monkeypatch):
+    """Replace ingest and search embeddings with a deterministic test vector."""
+    monkeypatch.setattr("akashic_codex.ingest.embed", fake_embed)
+    monkeypatch.setattr("akashic_codex.search.embed", fake_embed)
+    return fake_embed
+
+
+@pytest.fixture
 def db_conn(tmp_path):
     """A fresh, initialized, vector-capable connection, closed after the test."""
     db_path = str(tmp_path / "test.db")
@@ -34,10 +42,3 @@ def seeded_conn(db_conn):
         cid = insert_conversation(db_conn, title, log)
         insert_vector(db_conn, cid, embed(title))
     return db_conn
-
-
-@pytest.fixture
-def mock_embed(monkeypatch):
-    monkeypatch.setattr("akashic_codex.ingest.embed", fake_embed)
-    monkeypatch.setattr("akashic_codex.search.embed", fake_embed)
-    monkeypatch.setattr("akashic_codex.reembed.embed", fake_embed)

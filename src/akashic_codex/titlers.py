@@ -1,7 +1,7 @@
 """Titles: a short human-readable name for each conversation.
 
 Same seam pattern as the summarizer: AKASHIC_TITLER picks the backend.
-``heuristic`` (default) is offline and deterministic; ``ollama:<model>`` asks a
+`heuristic` (default) is offline and deterministic; `ollama:<model>` asks a
 local model. Unlike the summarizer, a failing Ollama does NOT fail the save: a
 title is cosmetic and can be regenerated later with ``cli retitle``, so losing
 a conversation over it would be the wrong trade.

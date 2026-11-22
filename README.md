@@ -22,6 +22,18 @@ with ordered turns, role, content, and an optional model label (`Assistant
 remains the source of truth, and transcripts without explicit model labels leave
 the per-turn model empty.
 
+Each parsed turn also gets a locally generated summary in `message_chunks`.
+Agents can request compact context with the conversation brief, summaries and
+ids for older turns, and the last N full turns with role and model labels.
+`older_chunk_ids` contains ids accepted by `GET /messages/{message_id}`; fetch
+one when its summary is insufficient. REST exposes
+`GET /conversations/{id}/context?recent_turns=6` and
+`GET /messages/{message_id}`; MCP clients can use `get_conversation_context`
+and `get_message`. This lets an agent keep a bounded recent window in context,
+then recover exact older details on demand. Per-turn summaries use the
+configured local summarizer at ingest time, so context retrieval does not call
+a model.
+
 Tags are generated at save time from the most frequent transcript keywords. Common English stopwords are filtered, words are normalized to lowercase, and punctuation is ignored; tag generation is deterministic and works offline.
 
 Any model talks to the same simple core (save, search, get) through whichever interface fits: a CLI, a REST API, and an MCP server. No model-specific logic lives in the store, which is what makes models swappable.
@@ -142,10 +154,13 @@ curl localhost:8000/conversations/1
 
 ### MCP server
 
-Exposes the read side of the store (`search_memory` and `get_conversation`) as
-MCP tools, so any MCP-capable model can recall your stored conversations
-directly. Saving stays on the CLI and REST API by design: over MCP a model can
-recall memory, not mutate it.
+Exposes the read side of the store as MCP tools, so any MCP-capable model can
+recall your stored conversations directly. Start with `search_memory`, then use
+`get_conversation_context` for a brief, older-turn summaries and a bounded
+window of recent full turns. If an older summary is not enough, pass its chunk
+id to `get_message` for the exact turn text. `get_conversation` remains
+available when the entire transcript is needed. Saving stays on the CLI and
+REST API by design: over MCP a model can recall memory, not mutate it.
 
 The server speaks stdio and is normally launched by the MCP client, not by hand.
 Register it once with your client and it starts on demand.

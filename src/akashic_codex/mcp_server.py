@@ -13,12 +13,13 @@ Launch (normally done by the MCP client, not by hand):
     python -m akashic_codex.mcp_server
 """
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.fastmcp import FastMCP
 
 from akashic_codex import db
+from akashic_codex.context import build_context
 from akashic_codex.search import search
 
-mcp = MCPServer("AkashicCodex")
+mcp = FastMCP("AkashicCodex")
 
 
 @mcp.tool()
@@ -51,6 +52,32 @@ def get_conversation(conv_id: int) -> dict:
         if row is None:
             raise ValueError("No result by that id found.")
         return dict(row)
+    finally:
+        conn.close()
+
+
+@mcp.tool()
+def get_message(message_id: int) -> dict:
+    """Retrieve a specific full turn chunk by id after reading a context brief."""
+    conn = db.connect()
+    try:
+        row = db.get_message_chunk(conn, message_id)
+        if row is None:
+            raise ValueError("No message by that id found.")
+        return dict(row)
+    finally:
+        conn.close()
+
+
+@mcp.tool()
+def get_conversation_context(conv_id: int, recent_turns: int = 6) -> dict:
+    """Build a compact context: conversation brief, older turn summaries and recent full turns."""
+    conn = db.connect()
+    try:
+        result = build_context(conn, conv_id, recent_turns)
+        if result is None:
+            raise ValueError("No conversation by that id found.")
+        return result
     finally:
         conn.close()
 

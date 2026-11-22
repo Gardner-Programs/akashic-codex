@@ -23,7 +23,7 @@ Retrieval is two-tier and hybrid: search ranks lightweight summaries first (keyw
 
 ## Current state
 
-Roadmap steps 1-9 done and tested, plus two quality-of-life features shipped since. Core: storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp` / `claude-hook`), the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`), and the MCP server (MCPServer over stdio, read-only tools `search_memory` and `get_conversation`).
+Roadmap steps 1-9 done and tested, plus two quality-of-life features shipped since. Core: storage, FTS5 keyword search, embeddings + semantic vector search, hybrid search (reciprocal rank fusion), the ingest pipeline (`save_conversation`), the CLI (`init` / `save` / `search` / `show` / `serve_api` / `serve_mcp` / `claude-hook`), the REST API (FastAPI: `POST /conversations`, `GET /search`, `GET /conversations/{id}`, interactive `/docs`), and the MCP server (FastMCP over stdio, read-only tools for search and conversation retrieval).
 
 Shipped since the numbered roadmap:
 - **Embedder identity + search guard (PR #16):** a generic `store_meta(key, value)` table with `db.get_meta`/`set_meta` (upsert via `ON CONFLICT`). `ingest.ensure_embedder_identity` stamps `embedding_model` + `embedding_dim` once at first ingest (dimension taken from the real vector; `db.py` never imports `embeddings`, staying decoupled). `search.assert_active_embedder` raises `RuntimeError` if the active model differs from the stored one, lenient (no-op) when unstamped.
@@ -71,6 +71,12 @@ A `mock_embed` fixture in `conftest.py` patches `embed` at its usage sites (`ing
 **Existing backlog:** #20 structured messages (per-turn role + model), #21 import adapters (Gemini/ChatGPT, siblings to the new Claude adapter in `adapters.py`), #23 summarizer follow-ups (extractive fragments on structured/dialogue text; Ollama needs a soft length cap).
 
 **As of 2026-11-21 Claude drives this repo.** The user handed implementation over; Claude writes the code, tests, and docs and ships via PR. The earlier guide-and-review mode no longer applies unless the user reframes a specific piece as learning.
+
+**Chunk summaries and compact agent context (#46):** every parsed turn is stored
+with a local ingest-time summary in `message_chunks`. REST context and message
+endpoints plus MCP `get_conversation_context` / `get_message` expose the brief,
+recent full turns, older summary pointers, and on-demand exact chunk retrieval.
+See README and `docs/DESIGN.md` for the behavior.
 
 ## Conventions
 
