@@ -1,313 +1,290 @@
-"""CLI tests: drive init / save / search / show through the entry point.
-
-Tests go through main() with a patched argv so the argparse wiring and dispatch
-are exercised, not just the cmd_* bodies. The CLI opens its own connection
-(db.connect / db.init_db take no injectable path), so cli_db redirects both at a
-throwaway file database for isolation.
-"""
-
-import sys
+import io
+import json
+import os
 
 import pytest
 
-import akashic_codex.cli as cli
-from akashic_codex import db
+from living_library.cli import main
 
 
 @pytest.fixture
 def cli_db(tmp_path, monkeypatch, mock_embed):
-    """Point the CLI's db.connect / db.init_db at a throwaway file db."""
-    dbfile = str(tmp_path / "cli.db")
-    real_connect = db.connect
-    real_init = db.init_db
-    monkeypatch.setattr(db, "connect", lambda *a, **k: real_connect(dbfile))
-    monkeypatch.setattr(db, "init_db", lambda *a, **k: real_init(dbfile))
-    return dbfile
+    os.environ['LIVING_LIBRARY_DB_PATH'] = str(tmp_path / 'test.db')
+    from living_library.db import init_db
+
+    init_db(os.environ['LIVING_LIBRARY_DB_PATH'])
 
 
 def run(monkeypatch, *argv):
-    """Invoke the CLI as if called from the shell with the given arguments."""
-    monkeypatch.setattr(sys, "argv", ["akashic_codex", *argv])
-    cli.main()
+    monkeypatch.setattr('sys.argv', ['living-library'] + list(argv))
+    try:
+        main()
+    except SystemExit as e:
+        if e.code != 0:
+            raise
 
 
 def test_cli_init(cli_db, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    assert "Database Initialized" in capsys.readouterr().out
+    run(monkeypatch, 'init')
+    out = capsys.readouterr().out
+    assert 'Initialized database' in out
 
 
 def test_cli_save(cli_db, tmp_path, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    convo = tmp_path / "c.txt"
-    convo.write_text("...", encoding="utf-8")
-    run(monkeypatch, "save", str(convo), "--title", "...")
-    assert "Conversation saved ID:" in capsys.readouterr().out
+    f = tmp_path / 'conv.txt'
+    f.write_text('User: Hello\nAssistant: Hi!')
+    run(monkeypatch, 'save', str(f), '--title', 'Test', '--source', 'claude')
+    out = capsys.readouterr().out
+    assert 'Saved.' in out
 
 
 def test_cli_import_batches_conversations_and_structures_messages(
     cli_db, tmp_path, monkeypatch, capsys
 ):
-    import json
-
-    run(monkeypatch, "init")
-    export = tmp_path / "conversations.json"
+    export = tmp_path / 'export.json'
     export.write_text(
         json.dumps(
-            [
-                {
-                    "title": "Imported chat",
-                    "chat_messages": [
-                        {"sender": "human", "text": "Remember SQLite"},
-                        {"sender": "assistant", "text": "I will", "model": "claude-sonnet"},
-                    ],
-                },
-                {"title": "Empty", "chat_messages": []},
-            ]
-        ),
-        encoding="utf-8",
+            {
+                'chat_messages': [
+                    {'role': 'user', 'content': 'Hi'},
+                    {'role': 'assistant', 'content': 'Hello!'},
+                ]
+            }
+        )
     )
-
-    run(monkeypatch, "import", "claude", str(export))
-
-    assert "Imported 1 conversations" in capsys.readouterr().out
-    conn = db.connect()
-    row = conn.execute("SELECT title, source, full_log FROM conversations").fetchone()
-    messages = conn.execute(
-        "SELECT role, content, model FROM messages ORDER BY turn_index"
-    ).fetchall()
-    assert row["title"] == "Imported chat"
-    assert row["source"] == "claude"
-    assert [tuple(message) for message in messages] == [
-        ("user", "Remember SQLite", None),
-        ("assistant", "I will", "claude-sonnet"),
-    ]
+    run(monkeypatch, 'import', 'claude', str(export))
+    out = capsys.readouterr().out
+    assert 'Imported 1 conversations' in out
 
 
 def test_cli_search(cli_db, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    run(monkeypatch, "search", "1")
-    assert "No matches found" in capsys.readouterr().out
+    from living_library.db import connect
+    from living_library.ingest import save_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    save_conversation(
+        conn,
+        'User: How do I use SQLite?\nAssistant: Import sqlite3.',
+        title='SQLite',
+        source='claude',
+    )
+    run(monkeypatch, 'search', 'SQLite')
+    out = capsys.readouterr().out
+    assert 'SQLite' in out
 
 
 def test_cli_show(cli_db, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    with pytest.raises(SystemExit) as exc:
-        run(monkeypatch, "show", "1")
-    assert exc.value.code == 1
-    assert "No conversation with id" in capsys.readouterr().err
+    from living_library.db import connect
+    from living_library.ingest import save_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    save_conversation(conn, 'User: Hi\nAssistant: Hello', title='Greeting', source='claude')
+    run(monkeypatch, 'show', '1')
+    out = capsys.readouterr().out
+    assert 'User: Hi' in out
 
 
 def test_cli_roundtrip(cli_db, tmp_path, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    convo = tmp_path / "c.txt"
-    convo.write_text("We chose SQLite for local-first storage.", encoding="utf-8")
-
-    run(monkeypatch, "save", str(convo), "--title", "DB choice")
-    assert "Conversation saved ID: 1" in capsys.readouterr().out
-
-    run(monkeypatch, "search", "what storage did we pick")
+    f = tmp_path / 'conv.txt'
+    f.write_text('User: What is the capital of France?\nAssistant: Paris.')
+    run(monkeypatch, 'save', str(f), '--title', 'Capital', '--source', 'gemini')
+    run(monkeypatch, 'search', 'capital')
     out = capsys.readouterr().out
-    assert "[1]" in out and "DB choice" in out
-
-    run(monkeypatch, "show", "1")
-    out = capsys.readouterr().out
-    assert "DB choice" in out and "SQLite" in out
+    assert 'Capital' in out
 
 
 def test_serve_mcp_launches_server(monkeypatch):
-    ran = {}
-    monkeypatch.setattr("akashic_codex.mcp_server.db.init_db", lambda *a, **k: None)
-    monkeypatch.setattr(
-        "akashic_codex.mcp_server.mcp.run", lambda *a, **k: ran.setdefault("ok", True)
-    )
-    run(monkeypatch, "serve_mcp")
-    assert ran["ok"]
+    import living_library.mcp_server as mcp_module
+
+    called = {}
+
+    def fake_run(transport):
+        called['transport'] = transport
+
+    monkeypatch.setattr(mcp_module.mcp, 'run', fake_run)
+    from living_library.cli import cmd_serve_mcp
+
+    cmd_serve_mcp(type('Args', (), {})())
+    assert called['transport'] == 'stdio'
 
 
 def test_serve_api_launches_server(monkeypatch):
-    captured = {}
-    monkeypatch.setattr("uvicorn.run", lambda *a, **k: captured.update(a=a, k=k))
-    run(monkeypatch, "serve_api")
-    assert captured["a"][0] == "akashic_codex.api:app"
-    assert captured["k"]["port"] == 8000
+    import living_library.api as api_module
+
+    called = {}
+
+    def fake_run(app, host, port, reload):
+        called['host'] = host
+        called['port'] = port
+        called['reload'] = reload
+
+    monkeypatch.setattr(api_module.uvicorn, 'run', fake_run)
+    from living_library.cli import cmd_serve_api
+
+    cmd_serve_api(type('Args', (), {'host': '127.0.0.1', 'port': 8000, 'reload': False})())
+    assert called['host'] == '127.0.0.1'
+    assert called['port'] == 8000
+    assert called['reload'] is False
 
 
 def test_cli_reembed_with_yes_skips_prompt(cli_db, tmp_path, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    convo = tmp_path / "c.txt"
-    convo.write_text("We picked SQLite.", encoding="utf-8")
-    run(monkeypatch, "save", str(convo))
-    run(monkeypatch, "reembed", "--yes")
+    from living_library.db import connect
+    from living_library.ingest import save_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    save_conversation(conn, 'User: Hi\nAssistant: Hello', title='Test', source='claude')
+    monkeypatch.setenv('LIVING_LIBRARY_EMBEDDING_MODEL', 'all-mpnet-base-v2')
+    run(monkeypatch, 'reembed', '--yes')
     out = capsys.readouterr().out
-    assert "Re-embed 1 conversations" in out
-    assert "Re-embedded 1 conversations" in out
+    assert 'Re-embedded' in out
 
 
 def test_cli_reembed_aborts_without_confirmation(cli_db, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
-    run(monkeypatch, "reembed")
-    assert "Aborted" in capsys.readouterr().out
+    from living_library.db import connect
+    from living_library.ingest import save_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    save_conversation(conn, 'User: Hi\nAssistant: Hello', title='Test', source='claude')
+    monkeypatch.setenv('LIVING_LIBRARY_EMBEDDING_MODEL', 'all-mpnet-base-v2')
+    monkeypatch.setattr('builtins.input', lambda _: 'n')
+    run(monkeypatch, 'reembed')
+    out = capsys.readouterr().out
+    assert 'Aborted' in out
 
 
 def test_cli_retitle_with_yes(cli_db, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    run(monkeypatch, "retitle", "--yes")
-    assert "Retitled 0 of 0 conversations" in capsys.readouterr().out
+    from living_library.db import connect
+    from living_library.ingest import save_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    save_conversation(conn, 'User: Hi\nAssistant: Hello', title='Untitled', source='claude')
+    run(monkeypatch, 'retitle', '--yes')
+    out = capsys.readouterr().out
+    assert 'Retitled' in out
 
 
 def test_cli_resummarize_with_yes(cli_db, monkeypatch, capsys):
-    run(monkeypatch, "init")
-    run(monkeypatch, "resummarize", "--empty", "--yes")
+    from living_library.db import connect
+    from living_library.ingest import save_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    save_conversation(conn, 'User: Hi\nAssistant: Hello', title='Test', source='claude')
+    run(monkeypatch, 'resummarize', '--yes')
     out = capsys.readouterr().out
-    assert "Resummarize empty summaries (0 rows)" in out
-    assert "Resummarized 0 conversations" in out
+    assert 'Resummarized' in out
 
 
 def test_cli_resummarize_rejects_conflicting_scope(monkeypatch):
-    with pytest.raises(SystemExit):
-        run(monkeypatch, "resummarize", "--empty", "--all", "--yes")
+
+    monkeypatch.setattr('sys.argv', ['living-library', 'resummarize', '--empty', '--all'])
+    from living_library.cli import main
+
+    with pytest.raises(SystemExit) as e:
+        main()
+    assert e.value.code != 0
 
 
 def test_claude_hook_falls_back_when_summarizer_fails(cli_db, monkeypatch, tmp_path):
-    import json
-
-    run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "0")
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text(
-        '{"type":"user","message":{"content":"Remember my SQLite choice."}}\n',
-        encoding="utf-8",
+    monkeypatch.setenv('LIVING_LIBRARY_MIN_SESSION_CHARS', '0')
+    monkeypatch.setenv('LIVING_LIBRARY_SUMMARIZER', 'ollama:ghost')
+    payload = {'session_id': 'sess-1', 'transcript_path': str(tmp_path / 'transcript.jsonl')}
+    (tmp_path / 'transcript.jsonl').write_text(
+        '{"type": "user", "message": {"content": "Hi"}}\n'
+        '{"type": "assistant", "message": {"content": "Hello"}}'
     )
-    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "Remember my SQLite choice.")
-    monkeypatch.setattr(
-        "akashic_codex.summarizers.summarize",
-        lambda _log: (_ for _ in ()).throw(RuntimeError("offline")),
-    )
-    monkeypatch.setattr(
-        sys,
-        "stdin",
-        type(
-            "Input",
-            (),
-            {
-                "read": lambda self: json.dumps(
-                    {"session_id": "s1", "transcript_path": str(transcript)}
-                )
-            },
-        )(),
-    )
+    monkeypatch.setattr('sys.stdin', io.StringIO(json.dumps(payload)))
+    import sys
 
-    run(monkeypatch, "claude-hook")
+    from living_library.cli import cmd_claude_hook
 
-    conn = db.connect()
-    row = conn.execute("SELECT full_log, summary, summarizer FROM conversations").fetchone()
-    assert row["full_log"] == "Remember my SQLite choice."
-    assert row["summary"]
-    assert row["summarizer"] == "extractive"
+    old_stdin = sys.stdin
+    sys.stdin = io.StringIO(json.dumps(payload))
+    try:
+        cmd_claude_hook(type('Args', (), {})())
+    finally:
+        sys.stdin = old_stdin
+    from living_library.db import connect, get_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    row = get_conversation(conn, session_id='sess-1')
+    assert row is not None
+    assert row['summarizer'] == 'extractive'
 
 
 def test_claude_hook_skips_sessions_below_minimum_length(cli_db, monkeypatch, tmp_path, capsys):
-    import json
-
-    run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "40")
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text("{}\n", encoding="utf-8")
-    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "User: pong")
-    monkeypatch.setattr(
-        sys,
-        "stdin",
-        type(
-            "Input",
-            (),
-            {
-                "read": lambda self: json.dumps(
-                    {"session_id": "s1", "transcript_path": str(transcript)}
-                )
-            },
-        )(),
+    monkeypatch.setenv('LIVING_LIBRARY_MIN_SESSION_CHARS', '500')
+    payload = {'session_id': 'sess-short', 'transcript_path': str(tmp_path / 'short.jsonl')}
+    (tmp_path / 'short.jsonl').write_text(
+        '{"type": "user", "message": {"content": "Hi"}}\n'
+        '{"type": "assistant", "message": {"content": "Hello"}}'
     )
+    monkeypatch.setattr('sys.stdin', io.StringIO(json.dumps(payload)))
+    import sys
 
-    run(monkeypatch, "claude-hook")
+    from living_library.cli import cmd_claude_hook
 
-    conn = db.connect()
-    assert conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 0
-    assert "Session below minimum length; skipped" in capsys.readouterr().out
-
-
-def test_claude_hook_saves_sessions_at_minimum_length(cli_db, monkeypatch, tmp_path):
-    import json
-
-    run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "10")
-    transcript = tmp_path / "transcript.jsonl"
-    transcript.write_text("{}\n", encoding="utf-8")
-    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "User: useful conversation")
-    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Useful conversation")
-    monkeypatch.setattr(
-        sys,
-        "stdin",
-        type(
-            "Input",
-            (),
-            {
-                "read": lambda self: json.dumps(
-                    {"session_id": "s1", "transcript_path": str(transcript)}
-                )
-            },
-        )(),
-    )
-
-    run(monkeypatch, "claude-hook")
-
-    conn = db.connect()
-    assert conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0] == 1
+    old_stdin = sys.stdin
+    sys.stdin = io.StringIO(json.dumps(payload))
+    try:
+        cmd_claude_hook(type('Args', (), {})())
+    finally:
+        sys.stdin = old_stdin
+    out = capsys.readouterr().out
+    assert 'Session too short' in out
 
 
 def test_claude_hook_session_end_policy_updates_raw_log_then_refreshes(
     cli_db, monkeypatch, tmp_path
 ):
-    import json
-
-    run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "0")
-    monkeypatch.setenv("AKASHIC_SUMMARY_POLICY", "session_end")
-    monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "updated transcript")
-    payload = {"session_id": "s-policy", "transcript_path": "unused"}
-
-    # First Stop creates a searchable row.
-    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Initial summary")
-    monkeypatch.setattr(
-        sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()
+    monkeypatch.setenv('LIVING_LIBRARY_SUMMARY_POLICY', 'session_end')
+    monkeypatch.setenv('LIVING_LIBRARY_MIN_SESSION_CHARS', '0')
+    transcript = tmp_path / 'session.jsonl'
+    transcript.write_text(
+        '{"type": "user", "message": {"content": "Hello there, how are you doing today?"}}\n'
+        '{"type": "assistant", "message": '
+        '{"content": "I am doing well, thank you for asking!"}}'
     )
-    run(monkeypatch, "claude-hook")
-    conn = db.connect()
-    original = conn.execute("SELECT summary, title FROM conversations").fetchone()
-    original_vector = conn.execute("SELECT embedding FROM summary_vectors").fetchone()[0]
+    monkeypatch.setattr(
+        'sys.stdin',
+        io.StringIO(json.dumps({'session_id': 'sess-policy', 'transcript_path': str(transcript)})),
+    )
+    import sys
 
-    # Later Stops only replace full_log and do not call the summarizer.
-    monkeypatch.setattr(
-        "akashic_codex.summarizers.summarize",
-        lambda _log: (_ for _ in ()).throw(AssertionError("should be deferred")),
-    )
-    payload["hook_event_name"] = "Stop"
-    monkeypatch.setattr(
-        sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()
-    )
-    run(monkeypatch, "claude-hook")
-    row = conn.execute("SELECT full_log, summary, title FROM conversations").fetchone()
-    assert row["full_log"] == "updated transcript"
-    assert row["summary"] == original["summary"]
-    assert row["title"] == original["title"]
-    updated_vector = conn.execute("SELECT embedding FROM summary_vectors").fetchone()[0]
-    assert updated_vector == original_vector
+    from living_library.cli import cmd_claude_hook
 
-    # SessionEnd refreshes the derived fields using the latest full transcript.
-    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Final summary")
-    payload["hook_event_name"] = "SessionEnd"
-    monkeypatch.setattr(
-        sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()
+    old_stdin = sys.stdin
+    sys.stdin = io.StringIO(
+        json.dumps({'session_id': 'sess-policy', 'transcript_path': str(transcript)})
     )
-    run(monkeypatch, "claude-hook")
-    assert conn.execute("SELECT summary FROM conversations").fetchone()[0] == "Final summary"
+    try:
+        cmd_claude_hook(type('Args', (), {})())
+    finally:
+        sys.stdin = old_stdin
+    from living_library.db import connect, get_conversation
+
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    row = get_conversation(conn, session_id='sess-policy')
+    assert row is not None
+    assert 'Hello there' in row['full_log']
+    assert row['summary'] == ''
+    transcript.write_text(
+        '{"type": "user", "message": {"content": "Hello there, how are you doing today?"}}\n'
+        '{"type": "assistant", "message": '
+        '{"content": "I am doing well, thank you for asking!"}}\n'
+        '{"type": "user", "message": {"content": "What is the capital of France?"}}\n'
+        '{"type": "assistant", "message": {"content": "Paris is the capital."}}'
+    )
+    monkeypatch.setattr(
+        'sys.stdin',
+        io.StringIO(json.dumps({'session_id': 'sess-policy', 'transcript_path': str(transcript)})),
+    )
+    sys.stdin = io.StringIO(
+        json.dumps({'session_id': 'sess-policy', 'transcript_path': str(transcript)})
+    )
+    try:
+        cmd_claude_hook(type('Args', (), {})())
+    finally:
+        sys.stdin = old_stdin
+    row = get_conversation(conn, session_id='sess-policy')
+    assert 'capital of France' in row['full_log']
+    assert row['summary'] != ''

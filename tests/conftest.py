@@ -1,43 +1,56 @@
-"""Shared pytest fixtures, auto-discovered for every test in this directory."""
+import os
+import sys
+from pathlib import Path
 
 import pytest
 
-from akashic_codex.db import connect, init_db, insert_conversation, insert_vector
-from akashic_codex.embeddings import embed
-
-EMBED_DIM = 384  # all-MiniLM-L6-v2 / the FLOAT[384] in schema.sql
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 
 def fake_embed(text: str) -> list[float]:
-    return [0.1] * EMBED_DIM
+    import hashlib
+
+    h = hashlib.md5(text.encode()).digest()
+    return [b / 255.0 for b in h] + [0.0] * (384 - 16)
 
 
 @pytest.fixture
-def db_conn(tmp_path):
-    """A fresh, initialized, vector-capable connection, closed after the test."""
-    db_path = str(tmp_path / "test.db")
-    init_db(db_path)
-    conn = connect(db_path)
+def mock_embed(monkeypatch):
+    monkeypatch.setattr('living_library.ingest.embed', fake_embed)
+    monkeypatch.setattr('living_library.search.embed', fake_embed)
+    monkeypatch.setattr('living_library.reembed.embed', fake_embed)
+    monkeypatch.setattr('living_library.resummarize.embed', fake_embed)
+    monkeypatch.setattr('living_library.titlers.embed', fake_embed)
+
+
+@pytest.fixture
+def db_conn(tmp_path, mock_embed):
+    os.environ['LIVING_LIBRARY_DB_PATH'] = str(tmp_path / 'test.db')
+    from living_library.db import connect, init_db
+
+    init_db(os.environ['LIVING_LIBRARY_DB_PATH'])
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
     yield conn
     conn.close()
 
 
 @pytest.fixture
 def seeded_conn(db_conn):
-    """db_conn pre-loaded with a few conversations and their embeddings."""
-    rows = [
-        ("Debugging a segfault in C", "..."),
-        ("Best pasta recipes for dinner", "..."),
-        ("Fixing memory corruption in C++", "..."),
-    ]
-    for title, log in rows:
-        cid = insert_conversation(db_conn, title, log)
-        insert_vector(db_conn, cid, embed(title))
+    from living_library.ingest import save_conversation
+
+    save_conversation(
+        db_conn, 'User: Hello\nAssistant: Hi there!', title='Greeting', source='claude'
+    )
+    save_conversation(
+        db_conn,
+        'User: How do I use SQLite?\nAssistant: Use sqlite3 module.',
+        title='SQLite help',
+        source='gemini',
+    )
+    save_conversation(
+        db_conn,
+        'User: What is C sharp?\nAssistant: C# is a programming language.',
+        title='C sharp basics',
+        source='claude',
+    )
     return db_conn
-
-
-@pytest.fixture
-def mock_embed(monkeypatch):
-    monkeypatch.setattr("akashic_codex.ingest.embed", fake_embed)
-    monkeypatch.setattr("akashic_codex.search.embed", fake_embed)
-    monkeypatch.setattr("akashic_codex.reembed.embed", fake_embed)

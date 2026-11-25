@@ -1,21 +1,11 @@
-"""Forward-only schema migrations for existing SQLite stores."""
+"""Deprecated alias for :mod:`living_library.migrations`."""
 
-import sqlite3
+import warnings
 
-
-def migration_1(conn: sqlite3.Connection) -> None:
-    """Add summarizer provenance introduced after the original schema."""
-    conn.execute("ALTER TABLE conversations ADD COLUMN summarizer TEXT")
-
-
-def migration_2(conn: sqlite3.Connection) -> None:
-    """Add Claude session upsert and cross-session thread identifiers."""
-    conn.execute("ALTER TABLE conversations ADD COLUMN session_id TEXT")
-    conn.execute("CREATE UNIQUE INDEX conversations_session_id ON conversations(session_id)")
-    conn.execute("ALTER TABLE conversations ADD COLUMN thread_id TEXT")
-
-
-MIGRATIONS = (
-    (1, migration_1),
-    (2, migration_2),
+warnings.warn(
+    "The 'akashic_codex.migrations' module has moved to 'living_library.migrations'.",
+    DeprecationWarning,
+    stacklevel=2,
 )
+
+from living_library.migrations import *  # noqa: E402, F403

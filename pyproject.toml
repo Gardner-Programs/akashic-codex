@@ -1,41 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "akashic-codex"
+name = "living-library"
 version = "0.1.0"
-description = "A local, model-agnostic memory store for AI conversations."
+description = "A local, model-agnostic memory store for AI conversations"
 readme = "README.md"
 requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110,<0.116",
+    "uvicorn>=0.29,<0.31",
+    "pydantic>=2.7,<3",
+    "sentence-transformers>=3.0,<4",
+    "mcp>=1.0,<2",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5,<1",
+    "pytest>=8.2,<9",
+]
+
+[project.scripts]
+living-library = "living_library.cli:main"
+akashic-codex = "akashic_codex.cli:main"
 
 [tool.setuptools.package-data]
-akashic_codex = ["store.html"]
-
-[tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["tests"]
-filterwarnings = [
-    # Third-party only: Starlette's TestClient warns about a future httpx2
-    # migration we don't control. Silence just this one; all other warnings
-    # (including our own deprecations) stay visible.
-    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
-]
+living_library = ["schema.sql", "store.html"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-src = ["src", "tests"]
 
 [tool.ruff.lint]
-# E/W: pycodestyle, F: pyflakes, I: import sorting, UP: pyupgrade,
-# B: bugbear (likely bugs), SIM: simplifications.
 select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+ignore = []
 
 [tool.ruff.lint.flake8-bugbear]
-# FastAPI's dependency/parameter helpers are designed to be called in argument
-# defaults; that is the framework's intended pattern, not the B008 footgun.
-extend-immutable-calls = [
-    "fastapi.Depends",
-    "fastapi.Query",
-    "fastapi.Path",
-    "fastapi.Body",
-    "fastapi.Header",
-    "fastapi.Cookie",
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore::DeprecationWarning:akashic_codex.*",
+    "ignore::DeprecationWarning:living_library.*",
 ]

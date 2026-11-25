@@ -22,8 +22,8 @@ export TQDM_DISABLE=1
 export TOKENIZERS_PARALLELISM=false
 
 # Throwaway, repeatable store.
-export AKASHIC_DB_PATH=/tmp/akashic-demo.db
-rm -f "$AKASHIC_DB_PATH"
+export LIVING_LIBRARY_DB_PATH=/tmp/living-library-demo.db
+rm -f "$LIVING_LIBRARY_DB_PATH"
 
 # Print a command with a typed-out effect, run it, then pause.
 run() {
@@ -42,10 +42,10 @@ run() {
 
 clear || true
 sleep 0.6
-run 'python -m akashic_codex.cli init'
-run 'python -m akashic_codex.cli save examples/sqlite_decision.txt --title "Why we chose SQLite" --source claude'
-run 'python -m akashic_codex.cli save examples/semantic_search.txt --title "How semantic search works" --source gemini'
-run 'python -m akashic_codex.cli save examples/weeknight_pasta.txt --title "Weeknight pasta" --source ollama'
-run 'python -m akashic_codex.cli search "what database did we pick for local storage"'
-run 'python -m akashic_codex.cli show 1'
+run 'python -m living_library.cli init'
+run 'python -m living_library.cli save examples/sqlite_decision.txt --title "Why we chose SQLite" --source claude'
+run 'python -m living_library.cli save examples/semantic_search.txt --title "How semantic search works" --source gemini'
+run 'python -m living_library.cli save examples/weeknight_pasta.txt --title "Weeknight pasta" --source ollama'
+run 'python -m living_library.cli search "what database did we pick for local storage"'
+run 'python -m living_library.cli show 1'
 sleep 2.5

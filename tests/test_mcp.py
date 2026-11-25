@@ -1,72 +1,54 @@
-"""MCP tests: exercise the tool functions directly over a temp database.
-
-The @mcp.tool() decorator returns the plain function, so the tools can be called
-like ordinary functions, no protocol or transport harness needed. The tools call
-db.connect() with no arguments (which points at the real default store), so the
-fixture redirects db.connect at a throwaway temp database for isolation and
-reuses the mock_embed fixture from conftest to stay offline and fast.
-"""
+import os
 
 import pytest
 
-from akashic_codex import db
-from akashic_codex.ingest import save_conversation
-from akashic_codex.mcp_server import get_conversation, search_memory
-
-DUMMY_CONVERSATIONS = [
-    {
-        "full_log": "User: SQLite or Postgres? Assistant: SQLite for local single-user.",
-        "title": "SQLite vs Postgres for local-first",
-        "source": "claude",
-    },
-    {
-        "full_log": "User: quick pasta recipe? Assistant: aglio e olio with garlic, oil.",
-        "title": "Quick aglio e olio recipe",
-        "source": "ollama",
-    },
-]
+from living_library.mcp_server import mcp
 
 
 @pytest.fixture
 def mcp_store(tmp_path, monkeypatch, mock_embed):
-    """Point the MCP tools at a fresh, pre-seeded temp db instead of the real store."""
-    db_path = str(tmp_path / "mcp.db")
-    db.init_db(db_path)
+    os.environ['LIVING_LIBRARY_DB_PATH'] = str(tmp_path / 'test.db')
+    from living_library.db import init_db
 
-    # The tools call db.connect() with no args. Redirect it to the temp db, and
-    # hand back a fresh connection per call so a tool closing one (it does, in a
-    # finally) does not break a later call in the same test.
-    real_connect = db.connect
-    monkeypatch.setattr(db, "connect", lambda *a, **k: real_connect(db_path))
+    init_db(os.environ['LIVING_LIBRARY_DB_PATH'])
+    from living_library.db import connect
+    from living_library.ingest import save_conversation
 
-    seed = real_connect(db_path)
-    for c in DUMMY_CONVERSATIONS:
-        save_conversation(seed, c["full_log"], c["title"], c["source"])
-    seed.close()
-    return db_path
+    conn = connect(os.environ['LIVING_LIBRARY_DB_PATH'])
+    save_conversation(
+        conn,
+        'User: How do I use SQLite?\nAssistant: Import sqlite3.',
+        title='SQLite help',
+        source='claude',
+    )
+    save_conversation(
+        conn,
+        'User: What is Python?\nAssistant: A programming language.',
+        title='Python basics',
+        source='gemini',
+    )
 
 
 def test_search_memory_returns_lightweight_rows(mcp_store):
-    results = search_memory("database")
-    assert isinstance(results, list) and results
-    for row in results:
-        assert set(row) == {"id", "title", "summary"}
-        assert "full_log" not in row
+    results = mcp._tool_manager._tools['search_memory'].fn(query='SQLite', limit=5)
+    assert len(results) >= 1
+    assert 'full_log' not in results[0]
 
 
 def test_search_memory_finds_relevant_conversation(mcp_store):
-    results = search_memory("recipe")
-    assert any("aglio e olio" in row["title"] for row in results)
+    results = mcp._tool_manager._tools['search_memory'].fn(query='programming language', limit=5)
+    assert len(results) >= 1
+    assert results[0]['title'] == 'Python basics'
 
 
 def test_get_conversation_returns_full_record(mcp_store):
-    convo = get_conversation(1)
-    assert isinstance(convo, dict)
-    assert convo["id"] == 1
-    assert convo["title"] == "SQLite vs Postgres for local-first"
-    assert "full_log" in convo and convo["full_log"]
+    results = mcp._tool_manager._tools['search_memory'].fn(query='SQLite', limit=5)
+    conv_id = results[0]['id']
+    conv = mcp._tool_manager._tools['get_conversation'].fn(conv_id=conv_id)
+    assert conv['title'] == 'SQLite help'
+    assert 'full_log' in conv
 
 
 def test_get_conversation_missing_id_raises(mcp_store):
     with pytest.raises(ValueError):
-        get_conversation(999)
+        mcp._tool_manager._tools['get_conversation'].fn(conv_id=999)

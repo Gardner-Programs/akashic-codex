@@ -1,14 +1,16 @@
-# AkashicCodex: Handoff
+# Living Library: Handoff
 
 Paste this to a fresh Claude instance to continue the project.
 
 ## What this is
 
-AkashicCodex is a local, model-agnostic memory store for AI conversations. The point: conversation history lives in a database the user owns, not inside any one model, so the user can switch between Claude, Gemini, a local Ollama model, etc., and keep their context. The memory IS the database.
+Living Library is a local, model-agnostic memory store for AI conversations. The point: conversation history lives in a database the user owns, not inside any one model, so the user can switch between Claude, Gemini, a local Ollama model, etc., and keep their context. The memory IS the database.
+
+> **Note:** This project was formerly known as Akashic Codex. The `akashic_codex` package and `akashic-codex` CLI command are deprecated aliases and will remain available for at least one release.
 
 ## Decisions already made (don't relitigate)
 
-- **Name:** AkashicCodex (repo folder `akashic-codex`, package `akashic_codex`).
+- **Name:** Living Library (repo folder `living-library`, package `living_library`). Formerly Akashic Codex.
 - **Database:** SQLite, single local file. Chosen for local-first ownership, privacy, zero server, single-user. All SQLite code is isolated in `db.py` so a future Postgres + pgvector move is contained.
 - **Semantic search:** via the `sqlite-vec` extension.
 - **Embeddings:** ONE fixed local model (`all-MiniLM-L6-v2`, 384 dims, sentence-transformers). Vectors from different models are not comparable, so this never changes mid-store. The user is free to choose a different model, but it is fixed for a store's lifetime (changing it means re-embedding everything). This is the project's core rule.
@@ -27,39 +29,40 @@ Roadmap steps 1-9 done and tested, plus two quality-of-life features shipped sin
 
 Shipped since the numbered roadmap:
 - **Embedder identity + search guard (PR #16):** a generic `store_meta(key, value)` table with `db.get_meta`/`set_meta` (upsert via `ON CONFLICT`). `ingest.ensure_embedder_identity` stamps `embedding_model` + `embedding_dim` once at first ingest (dimension taken from the real vector; `db.py` never imports `embeddings`, staying decoupled). `search.assert_active_embedder` raises `RuntimeError` if the active model differs from the stored one, lenient (no-op) when unstamped.
-- **Real pluggable summarizer (PR #22):** replaced the `full_log[:200]` placeholder. `src/akashic_codex/summarizers.py` exposes an `AKASHIC_SUMMARIZER` seam. Default `extractive`: sentence-split, embed each, rank by cosine similarity to the centroid of all sentence vectors, select within a ~300-char budget in document order (offline, no new deps). Optional `ollama:<model>`: abstractive via a local Ollama server over stdlib `urllib`, fail-loud (`RuntimeError`) on error, `AKASHIC_OLLAMA_HOST` overrides the endpoint. Each conversation records its `summarizer` backend in a new column (the summarizer may vary between saves, unlike the fixed embedder). `suggest_tags` is still a placeholder seam.
+- **Real pluggable summarizer (PR #22):** replaced the `full_log[:200]` placeholder. `src/living_library/summarizers.py` exposes an `LIVING_LIBRARY_SUMMARIZER` seam. Default `extractive`: sentence-split, embed each, rank by cosine similarity to the centroid of all sentence vectors, select within a ~300-char budget in document order (offline, no new deps). Optional `ollama:<model>`: abstractive via a local Ollama server over stdlib `urllib`, fail-loud (`RuntimeError`) on error, `LIVING_LIBRARY_OLLAMA_HOST` overrides the endpoint. Each conversation records its `summarizer` backend in a new column (the summarizer may vary between saves, unlike the fixed embedder). `suggest_tags` is still a placeholder seam.
 - **Auto-save via a Claude Code hook (#19):** live sessions are captured automatically instead of via manual `cli save`. Schema gained nullable `session_id` (UNIQUE) + `thread_id` on `conversations`, plus AFTER UPDATE/DELETE FTS triggers so the keyword index tracks in-place edits. `db.upsert_conversation` upserts by `session_id` (`ON CONFLICT ... DO UPDATE ... RETURNING id`); `db.delete_vector` lets a fresh embedding replace the old one on update; `ingest.save_session` is the session-keyed sibling of `save_conversation` (upsert + replace-vector). Capture is quarantined in `adapters.py`: `claude_transcript_to_log` flattens Claude Code's JSONL transcript into a `full_log` (keeps `user`/`assistant` text, drops thinking/tool/noise). The `claude-hook` CLI command reads the hook's stdin JSON (`session_id` + `transcript_path`), calls the adapter, and upserts with `source="claude-code"`. Platform-specific parsing lives ONLY in adapters (Gemini/ChatGPT are #21); the store and `save_session` stay format-agnostic. `thread_id` rides on the row but nothing sets it yet (see linking follow-up). README documents enabling the hook.
 
 **Re-embed command (#18):** `reembed.py` + `cli reembed [--yes]`. Embeds every summary with the active model outside any transaction (so the live hook is not blocked), then under `BEGIN IMMEDIATE` embeds anything that changed mid-run and calls `db.replace_all_vectors`, which drops and recreates `summary_vectors` at the new dimension and upserts the identity in `store_meta`, all in one transaction. `ensure_embedder_identity` now also refuses a model mismatch on write, and runs before the row is inserted so a refused save writes nothing.
 
-**Titles + retitle:** `titlers.py` (`AKASHIC_TITLER`: `heuristic` default, `ollama:<model>` with heuristic fallback on failure). `save_conversation`/`save_session` title from the summary when none is given; `cli retitle [--all] [--yes]` backs up then regenerates. The live hook runs with `AKASHIC_TITLER=ollama:gemma4:12b`.
+**Titles + retitle:** `titlers.py` (`LIVING_LIBRARY_TITLER`: `heuristic` default, `ollama:<model>` with heuristic fallback on failure). `save_conversation`/`save_session` title from the summary when none is given; `cli retitle [--all] [--yes]` backs up then regenerates. The live hook runs with `LIVING_LIBRARY_TITLER=ollama:gemma4:12b`.
 
 **Resummarize + hook fallback (#33):** `cli resummarize [--empty|--all] [--yes]` backs up the database, regenerates empty summaries by default or every summary with `--all`, and replaces matching vectors. Claude hook summarization errors fall back to the offline extractive backend so the raw transcript is still saved; manual saves remain fail-loud.
 
-**Auto-save summary policy (#34):** `AKASHIC_SUMMARY_POLICY` defaults to `each_turn`. `session_end` updates only the raw transcript on later Stop events, preserving its summary, title, and vector; SessionEnd refreshes derived data. The first qualifying Stop creates the searchable row.
+**Auto-save summary policy (#34):** `LIVING_LIBRARY_SUMMARY_POLICY` defaults to `each_turn`. `session_end` updates only the raw transcript on later Stop events, preserving its summary, title, and vector; SessionEnd refreshes derived data. The first qualifying Stop creates the searchable row.
 
-The REST app includes a small `/ui` browser for recent memories, hybrid search, and opening full transcripts. The README terminal demo GIF has been refreshed to show titles. Public repo (`Gardner-Programs/akashic-codex`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
+The REST app includes a small `/ui` browser for recent memories, hybrid search, and opening full transcripts. The README terminal demo GIF has been refreshed to show titles. Public repo (`Gardner-Programs/living-library`) with CI (ruff check + ruff format --check + pytest), an issue/PR workflow, and a polished README. `data/*.db` is gitignored.
 
 ## Files
 
-`schema.sql`, `src/akashic_codex/{db,embeddings,ingest,search,reembed,resummarize,summarizers,adapters,cli,api,mcp_server}.py`, `src/akashic_codex/store.html` (REST-backed browser UI), `tests/{test_smoke,test_cli,test_api,test_mcp,test_reembed,test_resummarize,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
+`schema.sql`, `src/living_library/{db,embeddings,ingest,search,reembed,resummarize,summarizers,adapters,cli,api,mcp_server}.py`, `src/living_library/store.html` (REST-backed browser UI), `tests/{test_smoke,test_cli,test_api,test_mcp,test_reembed,test_resummarize,conftest}.py`, `docs/DESIGN.md` (full 9-step roadmap + deferred-decision notes), `.github/workflows/ci.yml`.
 
 ## Commands
 
 - Setup: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`, then `cp .env.example .env`.
 - Tests: `pytest -q`. Lint: `ruff check src tests` and `ruff format --check src tests`.
-- CLI: `python -m akashic_codex.cli {init | save <file> --title "..." | search <query> | show <id> | reembed [--yes] | retitle [--all] [--yes] | resummarize [--empty|--all] [--yes] | serve_api | serve_mcp | claude-hook}`. (`claude-hook` reads a Claude Code Stop-hook payload on stdin; not run by hand.)
-- Config (env vars, see `.env.example`): `AKASHIC_DB_PATH`, `AKASHIC_EMBEDDING_MODEL` (fixed per store), `AKASHIC_SUMMARIZER` (`extractive` | `ollama:<model>`), `AKASHIC_OLLAMA_HOST`.
+- CLI: `python -m living_library.cli {init | save <file> --title "..." | search <query> | show <id> | reembed [--yes] | retitle [--all] [--yes] | resummarize [--empty|--all] [--yes] | serve_api | serve_mcp | claude-hook}`. (`claude-hook` reads a Claude Code Stop-hook payload on stdin; not run by hand.)
+- Config (env vars, see `.env.example`): `LIVING_LIBRARY_DB_PATH`, `LIVING_LIBRARY_EMBEDDING_MODEL` (fixed per store), `LIVING_LIBRARY_SUMMARIZER` (`extractive` | `ollama:<model>`), `LIVING_LIBRARY_OLLAMA_HOST`.
+- Default data path: `~/.living-library/living-library.db`; if it is absent and `~/.akashic/` exists, the old `~/.akashic/akashic.db` is used with a migration hint. Database moves are manual and must be backed up first.
 
 ## Testing approach
 
-A `mock_embed` fixture in `conftest.py` patches `embed` at its usage sites (`ingest.embed`, `search.embed`, not `embeddings.embed`) with a deterministic 384-dim vector, wired into the `cli_db` (test_cli) and `client` (test_api) isolation fixtures. `test_smoke.py` uses the REAL model as integration coverage (including the extractive summarizer). The Ollama backend is tested offline by monkeypatching `urllib.request.urlopen` (a `BytesIO` holding fake JSON for the success case, a function raising `URLError` for fail-loud), so CI never needs a server. Dispatch tests monkeypatch the module-level `summarizers.SUMMARIZER`. CLI tests drive `main()` via patched `sys.argv`; API tests use FastAPI `TestClient` + `dependency_overrides` on `get_conn`.
+A `mock_embed` fixture in `conftest.py` patches `embed` at its usage sites (`ingest.embed`, `search.embed`, not `embeddings.embed`) with a deterministic 384-dim vector, wired into the `cli_db` (test_cli) and `client` (test_api) isolation fixtures. `test_smoke.py` uses the REAL model as integration coverage (including the extractive summarizer). The Ollama backend is tested offline by monkeypatching `urllib.request.urlopen` (a `BytesIO` holding fake JSON for the success case, a function raising `URLError` for fail-loud), so CI never needs a server. Dispatch tests monkeypatch the module-level `summarizers.LIVING_LIBRARY_SUMMARIZER`. CLI tests drive `main()` via patched `sys.argv`; API tests use FastAPI `TestClient` + `dependency_overrides` on `get_conn`.
 
 ## Deferred decisions (logged in DESIGN.md)
 
 - **Embedder identity / `store_meta`: DONE (PR #16).** Re-embed (#18) built on it.
 - **Structured messages:** conversations are an opaque `full_log` blob; a `messages` table (role + per-turn `model`) would support swapping models mid-conversation and precise context re-injection once a chat exceeds a model's window. Keep `full_log` as the source of truth. Trigger: import adapters or a render/chat UI. Backlog #20.
-- **Schema versioning and migrations (#25): DONE.** `init_db()` tracks `schema_version` in `store_meta` and applies ordered forward-only migrations from `src/akashic_codex/migrations.py`. Unversioned stores are classified by their existing conversation columns, and invalid/newer versions fail clearly.
+- **Schema versioning and migrations (#25): DONE.** `init_db()` tracks `schema_version` in `store_meta` and applies ordered forward-only migrations from `src/living_library/migrations.py`. Unversioned stores are classified by their existing conversation columns, and invalid/newer versions fail clearly.
 
 ## Next step
 

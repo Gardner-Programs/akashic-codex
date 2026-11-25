@@ -1,4 +1,4 @@
--- AkashicCodex schema (SQLite)
+-- Living Library schema (SQLite)
 -- Two-tier retrieval: search lightweight summaries first, load full transcript only on a match.
 
 -- One row per stored conversation.
