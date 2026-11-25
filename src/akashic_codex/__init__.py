@@ -1,7 +1,7 @@
-"""AkashicCodex: a local, model-agnostic memory store for AI conversations.
+"""Old name of living_library, kept so existing hooks, MCP configs and imports keep working.
 
-The database is the product. Any model (Claude, Gemini, Ollama, ...) is just a
-client that saves to and searches this store. No model-specific logic lives here.
+`import akashic_codex.X` returns the living_library.X module itself; `python -m akashic_codex.cli`
+runs the living_library CLI. New code should import living_library.
 """
-
-__version__ = "0.1.0"
+from living_library import *  # noqa: F401,F403
+from living_library import __version__  # noqa: F401

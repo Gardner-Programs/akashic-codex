@@ -6,9 +6,9 @@ import urllib.error
 
 import pytest
 
-from akashic_codex import titlers
-from akashic_codex.db import get_conversation, insert_conversation
-from akashic_codex.ingest import save_session
+from living_library import titlers
+from living_library.db import get_conversation, insert_conversation
+from living_library.ingest import save_session
 
 
 def fake_ollama(reply):
@@ -56,7 +56,7 @@ def test_ollama_failure_falls_back_to_heuristic(monkeypatch):
 
 
 def test_save_session_generates_title_from_summary(db_conn, mock_embed, monkeypatch):
-    monkeypatch.setattr("akashic_codex.ingest.summarize", lambda log: "Fixing the hook. Done.")
+    monkeypatch.setattr("living_library.ingest.summarize", lambda log: "Fixing the hook. Done.")
     cid = save_session(db_conn, "s1", "log")
     assert get_conversation(db_conn, cid)["title"] == "Fixing the hook"
 

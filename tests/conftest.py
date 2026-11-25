@@ -2,8 +2,8 @@
 
 import pytest
 
-from akashic_codex.db import connect, init_db, insert_conversation, insert_vector
-from akashic_codex.embeddings import embed
+from living_library.db import connect, init_db, insert_conversation, insert_vector
+from living_library.embeddings import embed
 
 EMBED_DIM = 384  # all-MiniLM-L6-v2 / the FLOAT[384] in schema.sql
 
@@ -15,8 +15,8 @@ def fake_embed(text: str) -> list[float]:
 @pytest.fixture
 def mock_embed(monkeypatch):
     """Replace ingest and search embeddings with a deterministic test vector."""
-    monkeypatch.setattr("akashic_codex.ingest.embed", fake_embed)
-    monkeypatch.setattr("akashic_codex.search.embed", fake_embed)
+    monkeypatch.setattr("living_library.ingest.embed", fake_embed)
+    monkeypatch.setattr("living_library.search.embed", fake_embed)
     return fake_embed
 
 

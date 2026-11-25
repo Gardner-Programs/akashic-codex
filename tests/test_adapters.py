@@ -2,7 +2,7 @@
 
 import json
 
-from akashic_codex.adapters import chatgpt_export, claude_export, gemini_export
+from living_library.adapters import chatgpt_export, claude_export, gemini_export
 
 
 def write_export(tmp_path, data):

@@ -1,4 +1,4 @@
-# AkashicCodex Design
+# Living Library Design
 
 ## Goal
 
@@ -68,12 +68,12 @@ offline extractive summarizer if its configured backend fails, preserving the ra
 transcript and recording the fallback provenance. Manual saves remain fail-loud.
 
 The Claude Code auto-save hook also skips transcripts shorter than
-`AKASHIC_MIN_SESSION_CHARS` (default `200`). The check runs against the flattened
+`LIVING_LIBRARY_MIN_SESSION_CHARS` (default `200`). The check runs against the flattened
 transcript before summarization or database access; skipped sessions can be saved
 on a later turn once the cumulative transcript reaches the threshold. Set the
 value to `0` to save every session.
 
-`AKASHIC_SUMMARY_POLICY` defaults to `each_turn`, preserving the original Stop
+`LIVING_LIBRARY_SUMMARY_POLICY` defaults to `each_turn`, preserving the original Stop
 hook behavior. Set it to `session_end` and register the hook for both `Stop` and
 `SessionEnd`: Stop upserts the raw `full_log` while preserving the current title,
 summary, and vector, and SessionEnd runs the full derived-data pipeline. The first
@@ -98,7 +98,7 @@ one thread ID to all matched rows and their existing thread members. Semantic
 similarity is not used to auto-link conversations.
 
 Database snapshots written by `reembed`, `retitle`, and `resummarize` are
-retained per operation label. `AKASHIC_BACKUP_RETENTION` sets the positive number
+retained per operation label. `LIVING_LIBRARY_BACKUP_RETENTION` sets the positive number
 to keep, defaulting to 5; each new snapshot prunes older snapshots only for its
 own label.
 
@@ -115,7 +115,7 @@ Local-first, single file the user owns, zero server to run or secure, single-use
 
 ## Schema Versioning & Migrations
 
-To safely evolve the database schema over time without data loss or breaking existing stores, AkashicCodex records a `schema_version` in `store_meta`. `init_db()` runs forward-only migration steps defined in `src/akashic_codex/migrations.py` that are newer than the store's recorded version, bumping the version in the same transaction as each step. A fresh database gets the current schema directly; an unversioned older store is identified from its existing columns and upgraded from that version. Invalid or newer-than-supported versions fail clearly rather than being overwritten. Migration 1 adds summarizer provenance and migration 2 adds session and thread identifiers.
+To safely evolve the database schema over time without data loss or breaking existing stores, Living Library records a `schema_version` in `store_meta`. `init_db()` runs forward-only migration steps defined in `src/living_library/migrations.py` that are newer than the store's recorded version, bumping the version in the same transaction as each step. A fresh database gets the current schema directly; an unversioned older store is identified from its existing columns and upgraded from that version. Invalid or newer-than-supported versions fail clearly rather than being overwritten. Migration 1 adds summarizer provenance and migration 2 adds session and thread identifiers.
 
 ## Build roadmap
 

@@ -10,8 +10,8 @@ and cleared after.
 import pytest
 from fastapi.testclient import TestClient
 
-from akashic_codex import db
-from akashic_codex.api import app, get_conn
+from living_library import db
+from living_library.api import app, get_conn
 
 DUMMY_CONVERSATIONS = [
     {
@@ -48,7 +48,7 @@ def client(tmp_path, monkeypatch, mock_embed):
     db_path = str(tmp_path / "api.db")
     db.init_db(db_path)  # create the schema in the throwaway db
     monkeypatch.setattr(
-        "akashic_codex.ingest.summarize", lambda _full_log: "A conversation about its topic."
+        "living_library.ingest.summarize", lambda _full_log: "A conversation about its topic."
     )
 
     def override_get_conn():

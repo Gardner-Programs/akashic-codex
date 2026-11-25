@@ -9,9 +9,9 @@ reuses the mock_embed fixture from conftest to stay offline and fast.
 
 import pytest
 
-from akashic_codex import db
-from akashic_codex.ingest import save_conversation
-from akashic_codex.mcp_server import (
+from living_library import db
+from living_library.ingest import save_conversation
+from living_library.mcp_server import (
     get_conversation,
     get_conversation_context,
     get_message,
@@ -79,7 +79,7 @@ def test_get_conversation_missing_id_raises(mcp_store):
 
 def test_context_and_message_tools_retrieve_turn_by_id(mcp_store, monkeypatch):
     monkeypatch.setattr(
-        "akashic_codex.ingest.summarize", lambda _text: "A conversation about a marker."
+        "living_library.ingest.summarize", lambda _text: "A conversation about a marker."
     )
     conn = db.connect(mcp_store)
     conv_id = save_conversation(

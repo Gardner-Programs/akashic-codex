@@ -10,8 +10,8 @@ import sys
 
 import pytest
 
-import akashic_codex.cli as cli
-from akashic_codex import db
+import living_library.cli as cli
+from living_library import db
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def cli_db(tmp_path, monkeypatch, mock_embed):
 
 def run(monkeypatch, *argv):
     """Invoke the CLI as if called from the shell with the given arguments."""
-    monkeypatch.setattr(sys, "argv", ["akashic_codex", *argv])
+    monkeypatch.setattr(sys, "argv", ["living_library", *argv])
     cli.main()
 
 
@@ -116,9 +116,9 @@ def test_cli_roundtrip(cli_db, tmp_path, monkeypatch, capsys):
 
 def test_serve_mcp_launches_server(monkeypatch):
     ran = {}
-    monkeypatch.setattr("akashic_codex.mcp_server.db.init_db", lambda *a, **k: None)
+    monkeypatch.setattr("living_library.mcp_server.db.init_db", lambda *a, **k: None)
     monkeypatch.setattr(
-        "akashic_codex.mcp_server.mcp.run", lambda *a, **k: ran.setdefault("ok", True)
+        "living_library.mcp_server.mcp.run", lambda *a, **k: ran.setdefault("ok", True)
     )
     run(monkeypatch, "serve_mcp")
     assert ran["ok"]
@@ -128,7 +128,7 @@ def test_serve_api_launches_server(monkeypatch):
     captured = {}
     monkeypatch.setattr("uvicorn.run", lambda *a, **k: captured.update(a=a, k=k))
     run(monkeypatch, "serve_api")
-    assert captured["a"][0] == "akashic_codex.api:app"
+    assert captured["a"][0] == "living_library.api:app"
     assert captured["k"]["port"] == 8000
 
 
@@ -173,7 +173,7 @@ def test_claude_hook_falls_back_when_summarizer_fails(cli_db, monkeypatch, tmp_p
     import json
 
     run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "0")
+    monkeypatch.setenv("LIVING_LIBRARY_MIN_SESSION_CHARS", "0")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
         '{"type":"user","message":{"content":"Remember my SQLite choice."}}\n',
@@ -181,7 +181,7 @@ def test_claude_hook_falls_back_when_summarizer_fails(cli_db, monkeypatch, tmp_p
     )
     monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "Remember my SQLite choice.")
     monkeypatch.setattr(
-        "akashic_codex.summarizers.summarize",
+        "living_library.summarizers.summarize",
         lambda _log: (_ for _ in ()).throw(RuntimeError("offline")),
     )
     monkeypatch.setattr(
@@ -211,7 +211,7 @@ def test_claude_hook_skips_sessions_below_minimum_length(cli_db, monkeypatch, tm
     import json
 
     run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "40")
+    monkeypatch.setenv("LIVING_LIBRARY_MIN_SESSION_CHARS", "40")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text("{}\n", encoding="utf-8")
     monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "User: pong")
@@ -240,11 +240,11 @@ def test_claude_hook_saves_sessions_at_minimum_length(cli_db, monkeypatch, tmp_p
     import json
 
     run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "10")
+    monkeypatch.setenv("LIVING_LIBRARY_MIN_SESSION_CHARS", "10")
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text("{}\n", encoding="utf-8")
     monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "User: useful conversation")
-    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Useful conversation")
+    monkeypatch.setattr("living_library.summarizers.summarize", lambda _log: "Useful conversation")
     monkeypatch.setattr(
         sys,
         "stdin",
@@ -271,13 +271,13 @@ def test_claude_hook_session_end_policy_updates_raw_log_then_refreshes(
     import json
 
     run(monkeypatch, "init")
-    monkeypatch.setenv("AKASHIC_MIN_SESSION_CHARS", "0")
-    monkeypatch.setenv("AKASHIC_SUMMARY_POLICY", "session_end")
+    monkeypatch.setenv("LIVING_LIBRARY_MIN_SESSION_CHARS", "0")
+    monkeypatch.setenv("LIVING_LIBRARY_SUMMARY_POLICY", "session_end")
     monkeypatch.setattr(cli, "claude_transcript_to_log", lambda _path: "updated transcript")
     payload = {"session_id": "s-policy", "transcript_path": "unused"}
 
     # First Stop creates a searchable row.
-    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Initial summary")
+    monkeypatch.setattr("living_library.summarizers.summarize", lambda _log: "Initial summary")
     monkeypatch.setattr(
         sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()
     )
@@ -288,7 +288,7 @@ def test_claude_hook_session_end_policy_updates_raw_log_then_refreshes(
 
     # Later Stops only replace full_log and do not call the summarizer.
     monkeypatch.setattr(
-        "akashic_codex.summarizers.summarize",
+        "living_library.summarizers.summarize",
         lambda _log: (_ for _ in ()).throw(AssertionError("should be deferred")),
     )
     payload["hook_event_name"] = "Stop"
@@ -304,7 +304,7 @@ def test_claude_hook_session_end_policy_updates_raw_log_then_refreshes(
     assert updated_vector == original_vector
 
     # SessionEnd refreshes the derived fields using the latest full transcript.
-    monkeypatch.setattr("akashic_codex.summarizers.summarize", lambda _log: "Final summary")
+    monkeypatch.setattr("living_library.summarizers.summarize", lambda _log: "Final summary")
     payload["hook_event_name"] = "SessionEnd"
     monkeypatch.setattr(
         sys, "stdin", type("Input", (), {"read": lambda self: json.dumps(payload)})()

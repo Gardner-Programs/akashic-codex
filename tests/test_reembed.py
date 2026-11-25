@@ -9,8 +9,8 @@ import sqlite3
 import pytest
 import sqlite_vec
 
-from akashic_codex import reembed
-from akashic_codex.db import (
+from living_library import reembed
+from living_library.db import (
     backup,
     get_meta,
     insert_conversation,
@@ -18,7 +18,7 @@ from akashic_codex.db import (
     search_vectors,
     set_meta,
 )
-from akashic_codex.ingest import ensure_embedder_identity, save_conversation
+from living_library.ingest import ensure_embedder_identity, save_conversation
 
 
 def stored_vector(conn, conv_id):
@@ -181,7 +181,7 @@ def test_backup_refuses_in_memory_database():
 
 
 def test_backup_retains_newest_snapshots_per_label(db_conn, tmp_path, monkeypatch):
-    monkeypatch.setenv("AKASHIC_BACKUP_RETENTION", "2")
+    monkeypatch.setenv("LIVING_LIBRARY_BACKUP_RETENTION", "2")
     first = backup(db_conn, "pre-reembed")
     second = backup(db_conn, "pre-retitle")
     third = backup(db_conn, "pre-reembed")

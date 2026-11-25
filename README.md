@@ -1,14 +1,14 @@
-# AkashicCodex
+# Living Library
 
-[![CI](https://github.com/Gardner-Programs/akashic-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/Gardner-Programs/akashic-codex/actions/workflows/ci.yml)
+[![CI](https://github.com/Gardner-Programs/living-library/actions/workflows/ci.yml/badge.svg)](https://github.com/Gardner-Programs/living-library/actions/workflows/ci.yml)
 
 A local, model-agnostic memory store for AI conversations.
 
-The idea: your conversation history shouldn't live inside any one AI. AkashicCodex keeps it in a database you own, on your own machine, so you can switch freely between Claude, Gemini, a local Ollama model, or whatever comes next, and your context follows you. When one model runs out of usage, you switch to another and the memory is still there, because the memory *is* the database, not the model.
+The idea: your conversation history shouldn't live inside any one AI. Living Library keeps it in a database you own, on your own machine, so you can switch freely between Claude, Gemini, a local Ollama model, or whatever comes next, and your context follows you. When one model runs out of usage, you switch to another and the memory is still there, because the memory *is* the database, not the model.
 
 ## Demo
 
-![AkashicCodex CLI demo](docs/images/demo.gif)
+![Living Library CLI demo](docs/images/demo.gif)
 
 Save conversations from different models, then find one with a query worded nothing like the original. Keyword and semantic search are fused, so the right conversation surfaces even with no shared words.
 
@@ -57,11 +57,11 @@ changes are exercised before they can break a fresh install.
 ### CLI
 
 ```bash
-python -m akashic_codex.cli init
-python -m akashic_codex.cli save examples/sqlite_decision.txt --title "Why we chose SQLite" --source claude
-python -m akashic_codex.cli search "what database did we pick for local storage"
-python -m akashic_codex.cli show 1
-python -m akashic_codex.cli import claude ~/Downloads/conversations.json
+python -m living_library.cli init
+python -m living_library.cli save examples/sqlite_decision.txt --title "Why we chose SQLite" --source claude
+python -m living_library.cli search "what database did we pick for local storage"
+python -m living_library.cli show 1
+python -m living_library.cli import claude ~/Downloads/conversations.json
 ```
 
 Batch import provider JSON exports with `import claude`, `import gemini`, or
@@ -75,7 +75,7 @@ Gemini conversation JSON (`conversations`/`messages`), and ChatGPT
 ### Titles
 
 Conversations saved without a title get one generated from their summary.
-`AKASHIC_TITLER` picks the backend: `heuristic` (default, offline) or
+`LIVING_LIBRARY_TITLER` picks the backend: `heuristic` (default, offline) or
 `ollama:<model>` for a local model. If Ollama is down the save still succeeds
 with a heuristic title. To regenerate titles later (after an outage, or after
 switching models), run `retitle` (only "Untitled" rows) or `retitle --all`.
@@ -92,18 +92,18 @@ every summary. The command backs up the database first and re-embeds each
 changed summary so keyword and semantic search stay in sync:
 
 ```bash
-python -m akashic_codex.cli resummarize --empty
-python -m akashic_codex.cli resummarize --all
+python -m living_library.cli resummarize --empty
+python -m living_library.cli resummarize --all
 ```
 
 ### Switching embedding models
 
 Every vector in a store must come from one model, so saves and searches refuse to
 run if the active model differs from the one the store was built with. To switch,
-set `AKASHIC_EMBEDDING_MODEL` to the new model and rebuild every vector in one shot:
+set `LIVING_LIBRARY_EMBEDDING_MODEL` to the new model and rebuild every vector in one shot:
 
 ```bash
-AKASHIC_EMBEDDING_MODEL=all-mpnet-base-v2 python -m akashic_codex.cli reembed
+LIVING_LIBRARY_EMBEDDING_MODEL=all-mpnet-base-v2 python -m living_library.cli reembed
 ```
 
 It shows the plan (count, old and new model, cost) and asks before running. It
@@ -111,10 +111,10 @@ always writes a snapshot next to the database first (`akashic.db.pre-reembed-<ti
 swap is atomic: the vector table is recreated at the new dimension and the stored
 model identity updated in a single transaction, so a failure leaves the store as
 it was. Running it with the same model just rebuilds the index. Remember to give
-the auto-save hook the same `AKASHIC_EMBEDDING_MODEL`.
+the auto-save hook the same `LIVING_LIBRARY_EMBEDDING_MODEL`.
 
 Re-embed, retitle, and resummarize keep the newest five snapshots per operation
-by default. Set `AKASHIC_BACKUP_RETENTION` to a positive integer to change this;
+by default. Set `LIVING_LIBRARY_BACKUP_RETENTION` to a positive integer to change this;
 older snapshots with that operation's label are removed after each new backup.
 
 ### Schema updates
@@ -132,7 +132,7 @@ scripted version of the flow above, used to record the demo GIF.
 ### REST API
 
 ```bash
-python -m akashic_codex.cli serve_api --reload     # serves on http://127.0.0.1:8000
+python -m living_library.cli serve_api --reload     # serves on http://127.0.0.1:8000
 ```
 
 Open [http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui) for a small browser
@@ -168,7 +168,7 @@ Register it once with your client and it starts on demand.
 Claude Code:
 
 ```bash
-claude mcp add akashic-codex -- "$(pwd)/.venv/bin/python" -m akashic_codex.cli serve_mcp
+claude mcp add living-library -- "$(pwd)/.venv/bin/python" -m living_library.cli serve_mcp
 ```
 
 Claude Desktop (`claude_desktop_config.json`):
@@ -176,9 +176,9 @@ Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "akashic-codex": {
-      "command": "/absolute/path/to/akashic-codex/.venv/bin/python",
-      "args": ["-m", "akashic_codex.cli", "serve_mcp"]
+    "living-library": {
+      "command": "/absolute/path/to/living-library/.venv/bin/python",
+      "args": ["-m", "living_library.cli", "serve_mcp"]
     }
   }
 }
@@ -196,7 +196,7 @@ when that session has no row, so repeated turns do not consume conversation ids.
 Saved conversations get `source` set to `claude-code`.
 
 When a new session contains an existing conversation's complete transcript
-verbatim (at least 200 non-whitespace characters), AkashicCodex links the rows
+verbatim (at least 200 non-whitespace characters), Living Library links the rows
 with a shared `thread_id`. This detects copied or continued context across
 sessions without semantic guesses. Short overlaps are ignored to avoid linking
 on generic replies.
@@ -212,7 +212,7 @@ project, or `.claude/settings.json` for one):
         "hooks": [
           {
             "type": "command",
-            "command": "/absolute/path/to/akashic-codex/.venv/bin/python -m akashic_codex.cli claude-hook"
+            "command": "/absolute/path/to/living-library/.venv/bin/python -m living_library.cli claude-hook"
           }
         ]
       }
@@ -224,13 +224,13 @@ project, or `.claude/settings.json` for one):
 Notes:
 
 - Use an absolute path to the project's virtualenv python, same as the MCP setup above.
-- Set `AKASHIC_DB_PATH` to a permanent location (not the repo's `data/`) and run
-  `python -m akashic_codex.cli init` against it once before enabling the hook, so
+- Set `LIVING_LIBRARY_DB_PATH` to a permanent location (not the repo's `data/`) and run
+  `python -m living_library.cli init` against it once before enabling the hook, so
   the schema exists and your history lives outside the checkout.
 - The hook starts a fresh process each turn and loads the embedding model on every
   run, so expect a brief pause per turn. That is fine for local single-user use;
   making it cheaper (a resident process, or summarizing less often) is future work.
-- `AKASHIC_SUMMARY_POLICY` controls derived data refreshes: `each_turn` (default)
+- `LIVING_LIBRARY_SUMMARY_POLICY` controls derived data refreshes: `each_turn` (default)
   summarizes, retitles, and re-embeds on every Stop; `session_end` updates only
   `full_log` on Stops after the first saved turn, then refreshes summary, title,
   and embedding on SessionEnd. Under `session_end`, register the same command for
@@ -240,7 +240,7 @@ Notes:
   extractive summary and records `extractive` as the summarizer. Manual saves still
   report summarizer failures. The `resummarize` command can regenerate those rows
   later with the configured backend.
-- The hook skips transcripts shorter than `AKASHIC_MIN_SESSION_CHARS` (default
+- The hook skips transcripts shorter than `LIVING_LIBRARY_MIN_SESSION_CHARS` (default
   `200`) to avoid saving test sessions and one-word exchanges. Because each hook
   run sees the full transcript, a skipped session is saved on a later turn once it
   reaches the threshold. Set the value to `0` to disable the filter.
@@ -269,7 +269,7 @@ and full roadmap.
 
 ```
 schema.sql                 database schema
-src/akashic_codex/
+src/living_library/
   db.py                    all SQLite-specific code (swap point for Postgres)
   embeddings.py            single fixed embedding model
   ingest.py                save pipeline: summarize, tag, embed, store

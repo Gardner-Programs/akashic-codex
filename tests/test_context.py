@@ -1,13 +1,13 @@
-from akashic_codex import db
-from akashic_codex.context import build_context
-from akashic_codex.ingest import save_conversation
+from living_library import db
+from living_library.context import build_context
+from living_library.ingest import save_conversation
 
 
 def test_context_uses_brief_recent_turns_and_retrievable_older_chunks(
     db_conn, mock_embed, monkeypatch
 ):
     monkeypatch.setattr(
-        "akashic_codex.ingest.summarize",
+        "living_library.ingest.summarize",
         lambda _text: "A deployment decision and formatting advice.",
     )
     transcript = "\n".join(

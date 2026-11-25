@@ -11,9 +11,9 @@ import urllib.request
 
 import pytest
 
-from akashic_codex import __version__
-from akashic_codex.adapters import claude_transcript_to_log
-from akashic_codex.db import (
+from living_library import __version__
+from living_library.adapters import claude_transcript_to_log
+from living_library.db import (
     SCHEMA_PATH,
     delete_vector,
     get_conversation,
@@ -27,15 +27,15 @@ from akashic_codex.db import (
     set_meta,
     upsert_conversation,
 )
-from akashic_codex.embeddings import MODEL_NAME, embed
-from akashic_codex.ingest import (
+from living_library.embeddings import MODEL_NAME, embed
+from living_library.ingest import (
     ensure_embedder_identity,
     save_conversation,
     save_session,
     suggest_tags,
 )
-from akashic_codex.search import assert_active_embedder, fuse, search
-from akashic_codex.summarizers import (
+from living_library.search import assert_active_embedder, fuse, search
+from living_library.summarizers import (
     OLLAMA_SUMMARY_MAX_CHARS,
     SUMMARIZER,
     SUMMARY_MAX_CHARS,
@@ -269,7 +269,7 @@ def test_extractive_treats_dialogue_lines_as_units_and_skips_fragments(monkeypat
         embedded.append(text)
         return [1.0, 0.0]
 
-    monkeypatch.setattr("akashic_codex.summarizers.embed", fake_embed)
+    monkeypatch.setattr("living_library.summarizers.embed", fake_embed)
     text = (
         "#19\n# A surprisingly long heading that should not be summarized\n"
         "User: We chose SQLite for local storage.\n"
@@ -285,7 +285,7 @@ def test_extractive_treats_dialogue_lines_as_units_and_skips_fragments(monkeypat
 
 
 def test_summarize_defaults_to_extractive(monkeypatch):
-    monkeypatch.setattr("akashic_codex.summarizers.SUMMARIZER", "extractive")
+    monkeypatch.setattr("living_library.summarizers.SUMMARIZER", "extractive")
     # Terry Pratchett, Night Watch
     text = (
         "Sometimes it's like watching a wasp land on a stinging nettle: "
@@ -295,7 +295,7 @@ def test_summarize_defaults_to_extractive(monkeypatch):
 
 
 def test_summarize_raises_on_unknown_backend(monkeypatch):
-    monkeypatch.setattr("akashic_codex.summarizers.SUMMARIZER", "bogus")
+    monkeypatch.setattr("living_library.summarizers.SUMMARIZER", "bogus")
     with pytest.raises(ValueError):
         summarize("Something happened. Then more happened.")
 

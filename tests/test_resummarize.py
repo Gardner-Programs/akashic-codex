@@ -3,8 +3,8 @@
 import pytest
 import sqlite_vec
 
-from akashic_codex import resummarize
-from akashic_codex.db import insert_conversation, insert_vector
+from living_library import resummarize
+from living_library.db import insert_conversation, insert_vector
 
 
 def test_resummarize_empty_rows_updates_summary_and_vector(db_conn, monkeypatch):
