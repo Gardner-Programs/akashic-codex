@@ -3,7 +3,7 @@ Local, model-agnostic memory store for AI conversations (SQLite + FTS5 + sqlite-
 Use when: saving, searching or retrieving past conversations across models; working on the memory store, its MCP server, or embeddings.
 
 ## Run
-- MCP server `akashic-codex` in ~/.claude.json: `AKASHIC_DB_PATH=~/.akashic/akashic.db .venv/bin/python -m akashic_codex.cli serve_mcp`
+- MCP server `akashic-codex` (local scope, this folder only; other windows use tools/command-tower): `AKASHIC_DB_PATH=~/.akashic/akashic.db .venv/bin/python -m akashic_codex.cli serve_mcp`
 - CLI: `.venv/bin/python -m akashic_codex.cli init|save|search|show|reembed|retitle|serve_api|serve_mcp`
 - REST: `... cli serve_api --reload` (127.0.0.1:8000)
 - Tests: `.venv/bin/python -m pytest -q`; lint: `ruff check`
